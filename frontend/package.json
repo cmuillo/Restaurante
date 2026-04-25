@@ -1,0 +1,52 @@
+{
+  "name": "restaurante-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:admin": "vite --config vite.admin.config.ts --port 5173",
+    "dev:pos": "vite --config vite.pos.config.ts --port 5174",
+    "dev:kitchen": "vite --config vite.kitchen.config.ts --port 5175",
+    "dev:kiosk": "vite --config vite.kiosk.config.ts --port 5176",
+    "build:admin": "tsc && vite build --config vite.admin.config.ts",
+    "build:pos": "tsc && vite build --config vite.pos.config.ts",
+    "build:kitchen": "tsc && vite build --config vite.kitchen.config.ts",
+    "build:kiosk": "tsc && vite build --config vite.kiosk.config.ts",
+    "build:all": "npm run build:admin && npm run build:pos && npm run build:kitchen && npm run build:kiosk",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.56.2",
+    "@tanstack/react-query-devtools": "^5.56.2",
+    "axios": "^1.7.7",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.0",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.12.7",
+    "socket.io-client": "^4.8.0",
+    "tailwind-merge": "^2.5.3",
+    "zustand": "^4.5.5",
+    "zod": "^3.23.8",
+    "@hookform/resolvers": "^3.9.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.8"
+  }
+}

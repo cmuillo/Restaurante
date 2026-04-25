@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  @apply bg-gray-900 text-white overflow-hidden select-none;
+  width: 100vw;
+  height: 100vh;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
