@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Stack](https://img.shields.io/badge/stack-NestJS%20%2B%20React%20%2B%20PostgreSQL-orange)
 
-Sistema profesional de administración de restaurante con soporte multi-sucursal, Kiosko de autopedido, Panel de cocina en tiempo real y módulo POS completo.
+Sistema profesional de administración de restaurante con soporte multi-sucursal, Kiosko de autopedido, Panel de cocina en tiempo real, módulo POS completo y **facturación electrónica directa con el Ministerio de Hacienda de Costa Rica**.
 
 ---
 
@@ -21,6 +21,7 @@ Sistema profesional de administración de restaurante con soporte multi-sucursal
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Roles y Permisos](#roles-y-permisos)
 - [API Endpoints](#api-endpoints)
+- [Facturación Electrónica Hacienda CR](#facturación-electrónica-hacienda-cr)
 - [Contribuir](#contribuir)
 
 ---
@@ -37,6 +38,7 @@ Sistema profesional de administración de restaurante con soporte multi-sucursal
 - 🔒 **Auditoría**: Log de todas las acciones críticas del sistema
 - 🌐 **Multi-idioma**: Español, Inglés, Portugués (Kiosko)
 - ⚡ **Tiempo real**: WebSockets para cocina y comandas
+- 🧾 **Facturación electrónica Hacienda CR**: Tiquetes y facturas firmadas digitalmente (XAdES-BES), envío automático a la API de Hacienda, gestión de certificado .p12 desde la UI
 
 ---
 
@@ -52,7 +54,7 @@ Sistema profesional de administración de restaurante con soporte multi-sucursal
 ┌──────────────────────▼──────────────────────────────────┐
 │              BACKEND  (NestJS + TypeScript)              │
 │  Auth │ Sucursales │ Menú │ Órdenes │ POS │ Inventario  │
-│  Facturación │ Reportes │ CRM │ Auditoría │ Kiosko       │
+│  Facturación │ Hacienda CR │ Reportes │ CRM │ Auditoría   │
 └──────────────────────┬──────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────┐
@@ -139,7 +141,46 @@ Sistema profesional de administración de restaurante con soporte multi-sucursal
 - Historial completo de facturas
 - Anulación y notas de crédito
 - Exportar a PDF
-- Preparado para integración con entes fiscales
+- Integración nativa con Hacienda CR (ver sección 3.14)
+
+### 3.14 Facturación Electrónica — Hacienda CR
+
+> Integración directa con el Ministerio de Hacienda de Costa Rica. Sin intermediarios ni costos de SaaS.
+
+**Tipos de comprobantes soportados:**
+- `TE` Tiquete Electrónico (consumidor final, sin cédula)
+- `FE` Factura Electrónica (receptor con identificación fiscal)
+- `NC` Nota de Crédito Electrónica
+
+**Flujo automático:**
+```
+Factura creada → XML v4.3 generado → Firmado (XAdES-BES) → Enviado a Hacienda → Polling de respuesta (hasta 5 reintentos) → Estado actualizado en DB
+```
+
+**Características técnicas:**
+- Clave numérica de 50 dígitos generada automáticamente (506 + fecha + cédula + consecutivo + situación + seguridad)
+- Consecutivo de 20 dígitos (sucursal + terminal + tipo + secuencia)
+- Firma digital XAdES-BES con RSA-SHA256 usando certificado `.p12` del BCCR
+- Token OAuth2 hacia el IDP de Hacienda con caché automático y renovación antes de expirar
+- Modo contingencia: si el `.p12` no está cargado, el sistema sigue operando (sin firma) y registra estado `contingency`
+- Envío no bloqueante: la factura se crea instantáneamente; Hacienda se llama en background (`setImmediate`)
+- Polling exponencial: 10s → 20s → 30s → 40s → 60s máximo
+
+**Panel de administración (sin tocar código):**
+
+| Tab | Contenido |
+|-----|-----------|
+| **Emisor** | Cédula jurídica/física, tipo, provincia/cantón/distrito, códigos de sucursal y terminal |
+| **Credenciales ATV** | Usuario y contraseña ATV, toggle sandbox ↔ producción (auto-completa URLs oficiales) |
+| **Certificado Digital** | Upload `.p12` drag-and-drop, contraseña del certificado, indicador de estado |
+| **Estado de comprobantes** | Tabla en tiempo real de las últimas 50 facturas enviadas, botón "Reenviar" para errores/rechazos |
+
+**Ambientes preconfigurados:**
+
+| Ambiente | IDP URL | API URL |
+|----------|---------|----------|
+| Sandbox | `idp.comprobanteselectronicos.go.cr/…/rut-stag/…` | `api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1` |
+| Producción | `idp.comprobanteselectronicos.go.cr/…/rut/…` | `api.comprobanteselectronicos.go.cr/recepcion/v1` |
 
 ### 3.7 Kiosko de Autopedido
 **Flujo (≤ 5 pasos):**
@@ -242,6 +283,7 @@ Bienvenida → [Idioma] → Tipo de pedido → Menú → Detalle → Carrito →
 | Cocina (KDS) | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
 | POS / Caja | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Facturación | ✅ | ✅ | ✅ | ❌ | ❌ | 👁️ |
+| Hacienda CR | ✅ | ✅ | ❌ | ❌ | ❌ | 👁️ |
 | Inventario | ✅ | ✅ | ❌ | ❌ | 👁️ | 👁️ |
 | Gastos | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Reportes | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
@@ -292,7 +334,7 @@ customers ──< orders
 | `orders` | Órdenes (mesa, para llevar, kiosko) |
 | `order_items` | Ítems de cada orden |
 | `order_item_modifiers` | Modificadores aplicados a cada ítem |
-| `invoices` | Facturas generadas |
+| `invoices` | Facturas generadas (incluye campos de Hacienda: clave, XML, estado) |
 | `inventory_items` | Ingredientes/insumos |
 | `inventory_transactions` | Movimientos de inventario |
 | `suppliers` | Proveedores |
@@ -301,7 +343,7 @@ customers ──< orders
 | `customers` | Clientes del CRM |
 | `loyalty_transactions` | Movimientos de puntos de fidelización |
 | `audit_logs` | Log de auditoría inmutable |
-| `branch_config` | Configuración por sucursal |
+| `branch_config` | Configuración por sucursal (incluye todos los campos de Hacienda CR) |
 | `printer_config` | Configuración de impresoras |
 
 ---
@@ -384,6 +426,24 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=no-reply@turestaurante.com
 SMTP_PASS=tu_password
+
+# ─── Hacienda CR — Facturación Electrónica (opcional, configurable desde la UI) ───
+# Si se configuran aquí, sirven como fallback cuando la sucursal no tiene config en DB.
+# La configuración definitiva se hace desde Admin → Hacienda.
+HACIENDA_IDP_URL=https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/token
+HACIENDA_API_URL=https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1
+HACIENDA_CLIENT_ID=api-stag
+HACIENDA_USERNAME=tu_usuario_atv
+HACIENDA_PASSWORD=tu_password_atv
+HACIENDA_ISSUER_TAX_ID=3101234567
+HACIENDA_ISSUER_TAX_ID_TYPE=02
+HACIENDA_BRANCH_CODE=001
+HACIENDA_TERMINAL_CODE=00001
+HACIENDA_PROVINCE=01
+HACIENDA_CANTON=01
+HACIENDA_DISTRICT=01
+HACIENDA_P12_PATH=/ruta/al/certificado.p12
+HACIENDA_P12_PASSWORD=password_del_certificado
 ```
 
 ### Frontend (`frontend/.env`)
@@ -413,6 +473,14 @@ restauranteos/
 │   │   ├── kitchen/                # KDS y comandas
 │   │   ├── pos/                    # Punto de venta, caja
 │   │   ├── billing/                # Facturación y tickets
+│   │   ├── hacienda/               # Facturación electrónica Hacienda CR
+│   │   │   ├── hacienda.controller.ts   # Endpoints config/certificado/estado
+│   │   │   ├── hacienda.service.ts      # Lógica de envío y polling
+│   │   │   ├── hacienda-auth.service.ts # Token OAuth2 Hacienda
+│   │   │   ├── xml-builder.service.ts  # Generación XML v4.3
+│   │   │   ├── xades-signer.service.ts # Firma XAdES-BES (.p12)
+│   │   │   ├── hacienda.types.ts       # Interfaces TypeScript
+│   │   │   └── dto/                    # hacienda-config.dto.ts
 │   │   ├── inventory/              # Inventario e insumos
 │   │   ├── expenses/               # Gastos y contabilidad
 │   │   ├── reports/                # Reportes y analytics
@@ -429,6 +497,8 @@ restauranteos/
 │   ├── src/
 │   │   ├── apps/
 │   │   │   ├── admin/              # Panel de administración
+│   │   │   │   └── pages/
+│   │   │   │       └── HaciendaConfigPage.tsx  # Config Hacienda (4 tabs)
 │   │   │   ├── pos/                # Pantalla de caja
 │   │   │   ├── kitchen/            # Display de cocina
 │   │   │   └── kiosk/              # Kiosko de autopedido
@@ -473,6 +543,13 @@ GET    /api/pos/shift
 
 GET    /api/billing/invoices
 POST   /api/billing/invoices/:id/cancel
+POST   /api/billing/invoices/:id/resend-hacienda
+
+GET    /api/hacienda/config?branchId=
+PUT    /api/hacienda/config?branchId=
+POST   /api/hacienda/certificate?branchId=
+GET    /api/hacienda/status?branchId=&limit=50
+POST   /api/hacienda/invoices/:id/resend
 
 GET    /api/inventory/items
 PATCH  /api/inventory/items/:id
@@ -487,6 +564,42 @@ GET    /api/audit/logs
 ```
 
 > Documentación completa en `/api/docs` (Swagger) al levantar el backend.
+
+---
+
+---
+
+## 🧾 Facturación Electrónica Hacienda CR
+
+### Primeros pasos
+
+1. Obtener credenciales ATV en el [portal de Hacienda](https://www.hacienda.go.cr/)
+2. Obtener el certificado de Firma Digital del BCCR (archivo `.p12`)
+3. En el panel de Admin → **Hacienda**, seleccionar la sucursal y:
+   - Tab **Emisor**: ingresar cédula, tipo y ubicación
+   - Tab **Credenciales ATV**: usuario, contraseña y activar **Sandbox** para pruebas
+   - Tab **Certificado Digital**: subir el `.p12` e ingresar su contraseña
+4. Crear una factura de prueba desde el POS y verificar el estado en tab **Estado de comprobantes**
+5. Cuando todo esté validado, cambiar a **Producción** en el tab de credenciales
+
+### Estados de un comprobante
+
+| Estado | Descripción |
+|--------|-------------|
+| `pending` | En cola, aún no procesado |
+| `sending` | Enviándose a Hacienda |
+| `sent` | Recibido por Hacienda, esperando confirmación |
+| `accepted` | ✅ Aceptado por Hacienda |
+| `rejected` | ❌ Rechazado (usar botón Reenviar tras corregir) |
+| `error` | Error de red o configuración |
+| `contingency` | Sin firma digital (modo offline) |
+
+### Seguridad de los certificados
+
+- Los archivos `.p12` se almacenan en `backend/certs/` (fuera del árbol fuente)
+- Las carpetas `certs/`, `*.p12` y `*.pfx` están excluidas del control de versiones
+- Las contraseñas se almacenan en la base de datos; en producción se recomienda usar un gestor de secretos (AWS Secrets Manager, Vault, etc.)
+- Los passwords nunca se devuelven en texto plano por la API (se muestran como `••••••••`)
 
 ---
 
