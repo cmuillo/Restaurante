@@ -10,7 +10,8 @@ const navItems = [
   { to: '/customers', label: 'Clientes', icon: '👥' },
   { to: '/reports', label: 'Reportes', icon: '📈' },
   { to: '/users', label: 'Usuarios', icon: '👤' },
-  { to: '/branches', label: 'Sucursales', icon: '🏢' },
+  { to: '/branches',  label: 'Sucursales', icon: '🏢' },
+  { to: '/hacienda',  label: 'Hacienda',   icon: '🧾' },
 ];
 
 export default function AdminLayout() {

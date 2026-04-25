@@ -88,6 +88,40 @@ export class Invoice {
   @Column({ nullable: true })
   cancelledAt: Date;
 
+  // ─── Hacienda CR ───────────────────────────────────────────────────────────
+
+  /** Clave numérica de 50 dígitos exigida por Hacienda */
+  @Column({ nullable: true, length: 50, unique: true })
+  haciendaKey: string;
+
+  /** Número consecutivo de comprobante (ej: 00100001010000000001) */
+  @Column({ nullable: true, length: 20 })
+  haciendaConsecutive: string;
+
+  /** Tipo: TE = Tiquete Electrónico, FE = Factura Electrónica, NC = Nota de Crédito */
+  @Column({ nullable: true, length: 2, default: 'TE' })
+  haciendaDocType: string;
+
+  /** XML firmado enviado a Hacienda (base64) */
+  @Column('text', { nullable: true })
+  haciendaXml: string;
+
+  /** XML de respuesta de Hacienda (base64) */
+  @Column('text', { nullable: true })
+  haciendaResponseXml: string;
+
+  /** Estado del comprobante en Hacienda */
+  @Column({ nullable: true, default: 'pending' })
+  haciendaStatus: string; // pending | sent | accepted | rejected | contingency
+
+  /** Mensaje de error o descripción del rechazo */
+  @Column('text', { nullable: true })
+  haciendaMessage: string;
+
+  /** Fecha en que Hacienda aceptó o rechazó el comprobante */
+  @Column({ nullable: true })
+  haciendaProcessedAt: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 }

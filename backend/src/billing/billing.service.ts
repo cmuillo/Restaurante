@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Invoice, InvoiceStatus, PaymentMethod } from './entities/invoice.entity';
@@ -6,15 +6,19 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { AuditService } from '../audit/audit.service';
 import { CreateInvoiceDto } from './dto/billing.dto';
+import { HaciendaService } from '../hacienda/hacienda.service';
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     @InjectRepository(Invoice) private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(BranchConfig) private readonly configRepository: Repository<BranchConfig>,
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
+    private readonly haciendaService: HaciendaService,
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<Invoice> {
@@ -73,6 +77,14 @@ export class BillingService {
         entity: 'Invoice',
         entityId: saved.id,
         newValue: { invoiceNumber, total: order.total, paymentMethod: dto.paymentMethod },
+      });
+
+      // Enviar comprobante electrónico a Hacienda de forma asíncrona
+      // (no bloquea la respuesta al cajero si Hacienda tarda o falla)
+      setImmediate(() => {
+        this.haciendaService
+          .sendInvoice(saved.id)
+          .catch((e) => this.logger.error(`Error enviando factura ${saved.id} a Hacienda: ${e.message}`));
       });
 
       return saved;

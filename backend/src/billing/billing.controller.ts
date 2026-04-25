@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } f
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
 import { CreateInvoiceDto } from './dto/billing.dto';
+import { HaciendaService } from '../hacienda/hacienda.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { BranchScopeGuard } from '../auth/guards/branch-scope.guard';
@@ -14,7 +15,10 @@ import { UserRole } from '../users/entities/user.entity';
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly haciendaService: HaciendaService,
+  ) {}
 
   @Post('invoices')
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
@@ -47,5 +51,12 @@ export class BillingController {
     @CurrentUser() user: any,
   ) {
     return this.billingService.cancelInvoice(id, dto.reason, user.id);
+  }
+
+  @Post('invoices/:id/resend-hacienda')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
+  @ApiOperation({ summary: 'Reenviar comprobante a Hacienda (para facturas con error o rechazadas)' })
+  resendToHacienda(@Param('id', ParseUUIDPipe) id: string) {
+    return this.haciendaService.resend(id);
   }
 }

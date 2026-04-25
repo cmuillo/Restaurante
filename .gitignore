@@ -39,3 +39,8 @@ coverage/
 
 # Docker
 *.env.docker
+
+# Certificados digitales — nunca versionar .p12/.pfx
+backend/certs/
+*.p12
+*.pfx
