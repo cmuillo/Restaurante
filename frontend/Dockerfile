@@ -1,9 +1,20 @@
+# ---- Dev stage ----
+FROM node:20-alpine AS dev
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm config set strict-ssl false && npm install --ignore-scripts
+
+COPY . .
+EXPOSE 5173
+CMD ["npm", "run", "dev:admin", "--", "--host", "0.0.0.0"]
+
 # ---- Build stage ----
 FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm config set strict-ssl false && npm install --ignore-scripts
 
 COPY . .
 RUN npm run build:all

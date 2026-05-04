@@ -74,7 +74,7 @@ export class HaciendaController {
         if (allowed.includes(ext)) {
           cb(null, true);
         } else {
-          cb(new Error('Solo se permiten archivos .p12 o .pfx'), false);
+          cb(null, false);
         }
       },
       limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB máximo

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { InventoryService } from './inventory.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -38,6 +38,17 @@ export class InventoryController {
     return this.inventoryService.create(branchId, dto);
   }
 
+  @Patch('items/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
+  @ApiOperation({ summary: 'Actualizar ítem de inventario' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Body() dto: CreateInventoryItemDto,
+  ) {
+    return this.inventoryService.update(id, branchId, dto);
+  }
+
   @Post('items/:id/adjust')
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: 'Ajustar stock de un ítem' })
@@ -47,7 +58,7 @@ export class InventoryController {
     @Body() dto: AdjustStockDto,
     @CurrentUser() user: any,
   ) {
-    return this.inventoryService.adjustStock(id, branchId, dto.quantity, dto.type as unknown as TransactionType, dto.notes, user.id);
+    return this.inventoryService.adjustStock(id, branchId, dto.quantity, dto.type as unknown as TransactionType, dto.notes ?? '', user.id);
   }
 
   @Get('items/:id/transactions')

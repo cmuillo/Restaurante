@@ -10,6 +10,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/swagger';
 
 export class CreateProductDto {
   @ApiProperty()
@@ -66,4 +67,4 @@ export class CreateProductDto {
   sku?: string;
 }
 
-export class UpdateProductDto extends CreateProductDto {}
+export class UpdateProductDto extends PartialType(CreateProductDto) {}

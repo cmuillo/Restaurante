@@ -17,8 +17,12 @@ export class CustomersController {
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
   @ApiOperation({ summary: 'Buscar / listar clientes' })
-  findAll(@Query('search') search?: string) {
-    return this.customersService.findAll(search);
+  findAll(
+    @Query('search') search?: string,
+    @Query('isActive') isActive?: string,
+  ) {
+    const status = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
+    return this.customersService.findAll(search, status);
   }
 
   @Get(':id')

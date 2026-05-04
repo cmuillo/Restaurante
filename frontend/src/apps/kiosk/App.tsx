@@ -21,7 +21,7 @@ export { i18n };
 
 export default function App() {
   const { screen, language, cart, reset, touch, setConfirmedOrder } = useKioskStore();
-  const t = i18n[language];
+  const t = i18n[language] as typeof i18n.es;
 
   // Auto-reset por inactividad
   useEffect(() => {
@@ -37,14 +37,14 @@ export default function App() {
   // Pre-carga datos del menú para kiosco (sin auth requerido)
   useQuery({
     queryKey: ['kiosk-menu', BRANCH_ID],
-    queryFn: () => api.get(`/kiosk/menu?branchId=${BRANCH_ID}`).then((r) => r.data),
+    queryFn: () => api.get(`/kiosk/${BRANCH_ID}/menu`).then((r) => r.data),
     enabled: !!BRANCH_ID,
     staleTime: 5 * 60_000,
   });
 
   const placeOrder = useMutation({
     mutationFn: (paymentMethod: 'CARD' | 'CASH') =>
-      api.post('/kiosk/order', {
+      api.post(`/kiosk/${BRANCH_ID}/orders`, {
         branchId: BRANCH_ID,
         type: useKioskStore.getState().orderType,
         paymentMethod,
@@ -64,7 +64,7 @@ export default function App() {
     ORDER_TYPE: <OrderTypeScreen t={t} />,
     MENU: <MenuScreen t={t} branchId={BRANCH_ID} />,
     PRODUCT_DETAIL: <ProductDetailScreen t={t} branchId={BRANCH_ID} />,
-    CART: <CartScreen t={t} onPayment={(method) => placeOrder.mutate(method)} isPending={placeOrder.isPending} />,
+    CART: <CartScreen t={t} isPending={placeOrder.isPending} />,
     PAYMENT: <PaymentScreen t={t} onPayment={(method) => placeOrder.mutate(method)} isPending={placeOrder.isPending} />,
     CONFIRMATION: <ConfirmationScreen t={t} onReset={reset} />,
   };

@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
 
 interface TokenCache {
@@ -42,17 +41,19 @@ export class HaciendaAuthService {
 
     const params = new URLSearchParams({
       grant_type: 'password',
-      client_id: clientId,
-      username,
-      password,
+      client_id: clientId ?? '',
+      username: username ?? '',
+      password: password ?? '',
     });
 
-    const response = await axios.post(idpUrl, params.toString(), {
+    const response = await fetch(idpUrl!, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 10_000,
+      body: params.toString(),
+      signal: AbortSignal.timeout(10_000),
     });
-
-    const { access_token, expires_in } = response.data;
+    if (!response.ok) throw new Error(`IDP Hacienda respondió ${response.status}`);
+    const { access_token, expires_in } = await response.json() as { access_token: string; expires_in: number };
 
     this.tokenCaches.set(cacheKey, {
       accessToken: access_token,

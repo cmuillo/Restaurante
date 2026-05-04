@@ -31,7 +31,7 @@ import { WebsocketsModule } from './websockets/websockets.module';
         type: 'postgres',
         url: configService.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: false, // usar migraciones en producción
+        synchronize: configService.get('DB_SYNC') === 'true',
         logging: configService.get('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

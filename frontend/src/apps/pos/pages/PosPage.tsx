@@ -10,6 +10,20 @@ interface CartItem {
   quantity: number;
 }
 
+type UiOrderType = 'DINE_IN' | 'TO_GO' | 'DELIVERY';
+
+const ORDER_TYPE_TO_API: Record<UiOrderType, 'dine_in' | 'takeout' | 'delivery'> = {
+  DINE_IN: 'dine_in',
+  TO_GO: 'takeout',
+  DELIVERY: 'delivery',
+};
+
+interface PosTable {
+  id: string;
+  number: number;
+  status: string;
+}
+
 export default function PosPage() {
   const { user, logout } = useAuthStore();
   const branchId = user?.branchId ?? '';
@@ -17,7 +31,7 @@ export default function PosPage() {
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<'DINE_IN' | 'TO_GO' | 'DELIVERY'>('DINE_IN');
+  const [orderType, setOrderType] = useState<UiOrderType>('DINE_IN');
   const [tableId, setTableId] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -34,11 +48,13 @@ export default function PosPage() {
     enabled: !!branchId,
   });
 
-  const { data: tables = [] } = useQuery({
+  const { data: tables = [] } = useQuery<PosTable[]>({
     queryKey: ['pos-tables', branchId],
     queryFn: () => api.get(`/tables?branchId=${branchId}`).then((r) => r.data),
     enabled: !!branchId && orderType === 'DINE_IN',
   });
+
+  const freeTables = tables.filter((t) => String(t.status).toLowerCase() === 'free');
 
   const addToCart = (product: { id: string; name: string; price: number }) => {
     setCart((prev) => {
@@ -63,9 +79,18 @@ export default function PosPage() {
     mutationFn: () =>
       api.post('/orders', {
         branchId,
-        type: orderType,
+        type: ORDER_TYPE_TO_API[orderType],
         tableId: orderType === 'DINE_IN' && tableId ? tableId : undefined,
-        items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity, modifiers: [] })),
+        taxPercentage: 0,
+        tipPercentage: 0,
+        discountAmount: 0,
+        items: cart.map((i) => ({
+          productId: i.productId,
+          productName: i.productName,
+          unitPrice: i.price,
+          quantity: i.quantity,
+          modifiers: [],
+        })),
       }),
     onSuccess: () => {
       setCart([]);
@@ -127,13 +152,18 @@ export default function PosPage() {
         <div className="p-4 border-b border-gray-200">
           <h2 className="font-bold text-gray-800">Orden actual</h2>
           {orderType === 'DINE_IN' && (
+            <>
             <select value={tableId} onChange={(e) => setTableId(e.target.value)}
               className="mt-2 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">Seleccionar mesa…</option>
-              {tables.filter((t: { status: string }) => t.status === 'FREE').map((t: { id: string; number: number }) => (
+              {freeTables.map((t) => (
                 <option key={t.id} value={t.id}>Mesa {t.number}</option>
               ))}
             </select>
+            {freeTables.length === 0 && (
+              <p className="text-xs text-amber-600 mt-2">No hay mesas libres en este momento.</p>
+            )}
+            </>
           )}
         </div>
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TablesService } from './tables.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -50,5 +50,16 @@ export class TablesController {
     @Body() dto: { status: TableStatus; waiterId?: string },
   ) {
     return this.tablesService.updateStatus(id, branchId, dto.status, dto.waiterId);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar mesa (soft delete)' })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+  ) {
+    return this.tablesService.remove(id, branchId);
   }
 }

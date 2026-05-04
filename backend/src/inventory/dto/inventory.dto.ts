@@ -1,12 +1,6 @@
 import { IsString, IsOptional, IsNumber, IsEnum, IsUUID, Min, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-
-export enum MovementType {
-  IN = 'IN',
-  OUT = 'OUT',
-  ADJUSTMENT = 'ADJUSTMENT',
-  WASTE = 'WASTE',
-}
+import { TransactionType } from '../entities/inventory-transaction.entity';
 
 export class CreateInventoryItemDto {
   @ApiProperty()
@@ -51,13 +45,14 @@ export class CreateInventoryItemDto {
 }
 
 export class AdjustStockDto {
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsUUID()
-  inventoryItemId: string;
+  inventoryItemId?: string;
 
-  @ApiProperty({ enum: MovementType })
-  @IsEnum(MovementType)
-  type: MovementType;
+  @ApiProperty({ enum: TransactionType })
+  @IsEnum(TransactionType)
+  type: TransactionType;
 
   @ApiProperty()
   @IsNumber()

@@ -10,7 +10,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
 
   const { data: menu } = useQuery({
     queryKey: ['kiosk-menu', branchId],
-    queryFn: () => api.get(`/kiosk/menu?branchId=${branchId}`).then((r) => r.data),
+    queryFn: () => api.get(`/kiosk/${branchId}/menu`).then((r) => r.data),
     enabled: !!branchId,
   });
 
@@ -18,7 +18,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
   const products: { id: string; name: string; price: number; imageUrl?: string; description?: string }[] = menu?.products ?? [];
 
   const filtered = activeCategoryId
-    ? products.filter((p: { categoryId?: string }) => p.categoryId === activeCategoryId)
+    ? products.filter((p: any) => p.categoryId === activeCategoryId)
     : products;
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);

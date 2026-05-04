@@ -4,8 +4,21 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/admin/',
   root: 'src/apps/admin',
   build: { outDir: '../../../dist/admin', emptyOutDir: true },
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
-  server: { proxy: { '/api': 'http://localhost:3000', '/ws': { target: 'ws://localhost:3000', ws: true } } },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_TARGET ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: process.env.VITE_WS_TARGET ?? 'ws://localhost:3000',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
 });

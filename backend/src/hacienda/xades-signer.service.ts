@@ -102,7 +102,20 @@ export class XadesSignerService implements OnModuleInit {
       return xmlString;
     }
 
-    const sig = new SignedXml({ privateKey: this.privateKey });
+    // Incluir certificado en el XML firmado (API xml-crypto v6)
+    const certDer = this.certificate
+      .replace(/-----BEGIN CERTIFICATE-----/g, '')
+      .replace(/-----END CERTIFICATE-----/g, '')
+      .replace(/\s/g, '');
+
+    const sig = new SignedXml({
+      privateKey: this.privateKey,
+      publicCert: this.certificate,
+      signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+      canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
+      getKeyInfoContent: () =>
+        `<X509Data><X509Certificate>${certDer}</X509Certificate></X509Data>`,
+    });
 
     // Algoritmos requeridos por Hacienda CR (RSA-SHA256 + enveloped-signature)
     sig.addReference({
@@ -110,22 +123,6 @@ export class XadesSignerService implements OnModuleInit {
       transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/2001/10/xml-exc-c14n#'],
       digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
     });
-
-    sig.signingKey = this.privateKey;
-    sig.canonicalizationAlgorithm = 'http://www.w3.org/2001/10/xml-exc-c14n#';
-    sig.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
-
-    // Incluir certificado en el XML firmado
-    const certDer = this.certificate
-      .replace(/-----BEGIN CERTIFICATE-----/g, '')
-      .replace(/-----END CERTIFICATE-----/g, '')
-      .replace(/\s/g, '');
-
-    sig.keyInfoProvider = {
-      getKeyInfo: () =>
-        `<X509Data><X509Certificate>${certDer}</X509Certificate></X509Data>`,
-      getKey: () => Buffer.from(this.privateKey),
-    };
 
     sig.computeSignature(xmlString);
     return sig.getSignedXml();

@@ -3,11 +3,9 @@ import type { Strings } from '../i18n/strings';
 
 export default function CartScreen({
   t,
-  onPayment,
   isPending,
 }: {
   t: Strings;
-  onPayment: (method: 'CARD' | 'CASH') => void;
   isPending: boolean;
 }) {
   const { cart, removeFromCart, goTo } = useKioskStore();

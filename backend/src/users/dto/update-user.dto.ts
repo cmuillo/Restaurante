@@ -1,6 +1,6 @@
 import { PartialType, OmitType } from '@nestjs/swagger';
 import { CreateUserDto } from './create-user.dto';
-import { IsOptional, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MinLength, MaxLength, IsBoolean } from 'class-validator';
 
 export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ['password'] as const)) {
   @IsOptional()
@@ -8,4 +8,8 @@ export class UpdateUserDto extends PartialType(OmitType(CreateUserDto, ['passwor
   @MinLength(8)
   @MaxLength(100)
   password?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

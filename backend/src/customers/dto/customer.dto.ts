@@ -1,16 +1,11 @@
-import { IsString, IsOptional, IsEmail, IsPhoneNumber, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsDateString, MaxLength, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
   @ApiProperty()
   @IsString()
-  @MaxLength(100)
-  firstName: string;
-
-  @ApiProperty()
-  @IsString()
-  @MaxLength(100)
-  lastName: string;
+  @MaxLength(150)
+  name: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -19,7 +14,8 @@ export class CreateCustomerDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsPhoneNumber()
+  @IsString()
+  @MaxLength(50)
   phone?: string;
 
   @ApiProperty({ required: false })
@@ -44,14 +40,8 @@ export class UpdateCustomerDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
-  firstName?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  lastName?: string;
+  @MaxLength(150)
+  name?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -60,7 +50,8 @@ export class UpdateCustomerDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsPhoneNumber()
+  @IsString()
+  @MaxLength(50)
   phone?: string;
 
   @ApiProperty({ required: false })
@@ -79,4 +70,9 @@ export class UpdateCustomerDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

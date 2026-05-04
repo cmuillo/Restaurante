@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { InventoryItem } from './entities/inventory-item.entity';
+import { InventoryItem, InventoryUnit } from './entities/inventory-item.entity';
 import { InventoryTransaction, TransactionType } from './entities/inventory-transaction.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { CreateInventoryItemDto } from './dto/inventory.dto';
@@ -26,8 +26,30 @@ export class InventoryService {
   }
 
   async create(branchId: string, dto: CreateInventoryItemDto): Promise<InventoryItem> {
-    const item = this.itemRepository.create({ ...dto, branchId });
+    const item = this.itemRepository.create({
+      branchId,
+      name: dto.name,
+      unit: dto.unit as unknown as InventoryUnit,
+      currentStock: dto.currentStock ?? 0,
+      minStock: (dto as any).minimumStock ?? 0,
+      costPerUnit: dto.costPerUnit ?? 0,
+    });
     return this.itemRepository.save(item);
+  }
+
+  async update(id: string, branchId: string, dto: CreateInventoryItemDto): Promise<InventoryItem> {
+    const item = await this.itemRepository.findOne({ where: { id, branchId } });
+    if (!item) throw new NotFoundException('Ítem de inventario no encontrado');
+
+    await this.itemRepository.update(id, {
+      name: dto.name,
+      unit: dto.unit as unknown as InventoryUnit,
+      currentStock: dto.currentStock ?? item.currentStock,
+      minStock: (dto as any).minimumStock ?? item.minStock,
+      costPerUnit: dto.costPerUnit ?? item.costPerUnit,
+    } as any);
+
+    return this.itemRepository.findOneOrFail({ where: { id, branchId } });
   }
 
   async adjustStock(

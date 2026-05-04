@@ -48,7 +48,7 @@ export class OrdersService {
       });
 
       const taxAmount = subtotal * (dto.taxPercentage / 100);
-      const tipAmount = subtotal * (dto.tipPercentage / 100);
+      const tipAmount = subtotal * ((dto.tipPercentage ?? 0) / 100);
       const total = subtotal + taxAmount + tipAmount - (dto.discountAmount || 0);
 
       // Número de orden secuencial por sucursal
@@ -157,7 +157,7 @@ export class OrdersService {
     if (dto.status === OrderStatus.READY) updates.readyAt = new Date();
     if (dto.status === OrderStatus.COMPLETED) updates.completedAt = new Date();
 
-    await this.orderRepository.update(id, updates);
+    await this.orderRepository.update(id, updates as any);
     const updated = await this.findOne(id, branchId);
 
     // Notificar al mesero cuando el pedido está listo

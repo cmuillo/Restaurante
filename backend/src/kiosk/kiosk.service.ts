@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Category } from '../menu/entities/category.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { OrdersService } from '../orders/orders.service';
-import { CreateOrderDto } from '../orders/dto/create-order.dto';
+import { CreateKioskOrderDto } from './dto/create-kiosk-order.dto';
 import { OrderType } from '../orders/entities/order.entity';
 
 @Injectable()
@@ -58,7 +58,7 @@ export class KioskService {
    * Crea una orden desde el kiosko (sin autenticación, sin userId).
    * El branchId viene del parámetro de la URL para evitar que el cliente lo manipule.
    */
-  async createOrder(branchId: string, dto: Omit<CreateOrderDto, 'branchId'>): Promise<{ orderNumber: number; total: number }> {
+  async createOrder(branchId: string, dto: CreateKioskOrderDto): Promise<{ orderNumber: number; total: number }> {
     const config = await this.configRepository.findOne({ where: { branchId } });
     if (!config?.kioskEnabled) {
       throw new NotFoundException('El kiosko no está habilitado para esta sucursal');

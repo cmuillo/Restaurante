@@ -2,7 +2,6 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import axios from 'axios';
 import { Invoice } from '../billing/entities/invoice.entity';
 import { Order } from '../orders/entities/order.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
@@ -140,7 +139,7 @@ export class HaciendaService {
       quantity: item.quantity,
       unitPrice: parseFloat(String(item.unitPrice)),
       taxRate,
-      discount: parseFloat(String(item.discount ?? 0)),
+      discount: 0,
       unitOfMeasure: 'Sp',
     })) ?? [];
 
@@ -215,13 +214,16 @@ export class HaciendaService {
       comprobanteXml: xmlBase64,
     };
 
-    await axios.post(`${apiUrl}/recepcion`, body, {
+    const resp = await fetch(`${apiUrl}/recepcion`, {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      timeout: 15_000,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
     });
+    if (!resp.ok) throw new Error(`Hacienda recepción respondió ${resp.status}`);
   }
 
   /**
@@ -239,18 +241,18 @@ export class HaciendaService {
       const apiUrl = cfg.haciendaApiUrl ?? this.config.get<string>('HACIENDA_API_URL');
       const token = await this.authService.getAccessToken(cfg);
 
-      const response = await axios.get(`${apiUrl}/recepcion/${key}`, {
+      const resp = await fetch(`${apiUrl}/recepcion/${key}`, {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 10_000,
+        signal: AbortSignal.timeout(10_000),
       });
+      const data = await resp.json() as Record<string, unknown>;
 
-      const data = response.data;
-      const estado: string = data?.ind_estado ?? '';
+      const estado: string = (data?.ind_estado as string) ?? '';
 
       if (estado === 'aceptado') {
         await this.invoiceRepository.update(invoiceId, {
           haciendaStatus: 'accepted',
-          haciendaResponseXml: data?.respuesta_xml ?? null,
+          haciendaResponseXml: data?.respuesta_xml ? String(data.respuesta_xml) : undefined,
           haciendaMessage: 'Comprobante aceptado por Hacienda',
           haciendaProcessedAt: new Date(),
         });
@@ -258,8 +260,8 @@ export class HaciendaService {
       } else if (estado === 'rechazado') {
         await this.invoiceRepository.update(invoiceId, {
           haciendaStatus: 'rejected',
-          haciendaResponseXml: data?.respuesta_xml ?? null,
-          haciendaMessage: data?.detalle_mensaje ?? 'Comprobante rechazado',
+          haciendaResponseXml: data?.respuesta_xml ? String(data.respuesta_xml) : undefined,
+          haciendaMessage: data?.detalle_mensaje ? String(data.detalle_mensaje) : 'Comprobante rechazado',
           haciendaProcessedAt: new Date(),
         });
         this.logger.warn(`Comprobante ${key} RECHAZADO: ${data?.detalle_mensaje}`);

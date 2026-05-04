@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { Customer } from './entities/customer.entity';
@@ -12,18 +12,20 @@ export class CustomersService {
     @InjectRepository(LoyaltyTransaction) private readonly loyaltyRepository: Repository<LoyaltyTransaction>,
   ) {}
 
-  findAll(search?: string): Promise<Customer[]> {
+  findAll(search?: string, isActive?: boolean): Promise<Customer[]> {
+    const statusFilter = isActive ?? true;
+
     if (search) {
       return this.customerRepository.find({
         where: [
-          { name: ILike(`%${search}%`), isActive: true },
-          { email: ILike(`%${search}%`), isActive: true },
-          { phone: ILike(`%${search}%`), isActive: true },
+          { name: ILike(`%${search}%`), isActive: statusFilter },
+          { email: ILike(`%${search}%`), isActive: statusFilter },
+          { phone: ILike(`%${search}%`), isActive: statusFilter },
         ],
         take: 20,
       });
     }
-    return this.customerRepository.find({ where: { isActive: true }, order: { name: 'ASC' } });
+    return this.customerRepository.find({ where: { isActive: statusFilter }, order: { name: 'ASC' } });
   }
 
   async findOne(id: string): Promise<Customer> {
@@ -32,12 +34,26 @@ export class CustomersService {
     return customer;
   }
 
-  create(dto: CreateCustomerDto): Promise<Customer> {
+  async create(dto: CreateCustomerDto): Promise<Customer> {
+    if (dto.email) {
+      const existing = await this.customerRepository.findOne({ where: { email: dto.email } });
+      if (existing) {
+        throw new ConflictException('Ya existe un cliente con ese email');
+      }
+    }
+
     const customer = this.customerRepository.create(dto);
     return this.customerRepository.save(customer);
   }
 
   async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
+    if (dto.email) {
+      const existing = await this.customerRepository.findOne({ where: { email: dto.email } });
+      if (existing && existing.id !== id) {
+        throw new ConflictException('Ya existe un cliente con ese email');
+      }
+    }
+
     await this.customerRepository.update(id, dto);
     return this.findOne(id);
   }

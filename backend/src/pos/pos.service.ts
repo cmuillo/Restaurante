@@ -57,7 +57,7 @@ export class PosService {
     shift.closingCash = dto.closingCash;
     shift.expectedCash = expectedCash;
     shift.cashDifference = cashDifference;
-    shift.closingNotes = dto.closingNotes ?? null;
+    shift.closingNotes = (dto.closingNotes ?? '') as string;
     shift.closedAt = new Date();
     shift.status = ShiftStatus.CLOSED;
 

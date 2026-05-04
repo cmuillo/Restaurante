@@ -45,7 +45,7 @@ export class BranchesService {
   }
 
   async updateConfig(branchId: string, dto: Partial<BranchConfig>): Promise<BranchConfig> {
-    await this.configRepository.update({ branchId }, dto);
+    await this.configRepository.update({ branchId }, dto as any);
     return this.getConfig(branchId);
   }
 }

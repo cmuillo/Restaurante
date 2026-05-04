@@ -9,7 +9,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/pos">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Protected><PosPage /></Protected>} />
