@@ -5,12 +5,13 @@ import { OrdersService } from './orders.service';
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemModifier } from './entities/order-item-modifier.entity';
+import { Product } from '../menu/entities/product.entity';
 import { WebsocketsModule } from '../websockets/websockets.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, OrderItemModifier]),
+    TypeOrmModule.forFeature([Order, OrderItem, OrderItemModifier, Product]),
     WebsocketsModule,
     AuditModule,
   ],

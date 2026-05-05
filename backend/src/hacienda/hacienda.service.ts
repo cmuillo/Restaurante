@@ -133,14 +133,19 @@ export class HaciendaService {
     const key = buildKey({ taxId, date: invoice.createdAt, consecutive, securityCode });
 
     // Construir líneas a partir de los ítems de la orden
-    const taxRate = parseFloat(String(branchConfig.taxPercentage ?? 13));
     const lines = invoice.order.items?.map((item: OrderItem) => ({
       productName: item.product?.name ?? item.productName ?? 'Producto',
       quantity: item.quantity,
       unitPrice: parseFloat(String(item.unitPrice)),
-      taxRate,
+      taxRate: item.taxRate == null
+        ? parseFloat(String(branchConfig.taxPercentage ?? 13))
+        : parseFloat(String(item.taxRate)),
+      taxCode: item.taxCode ?? '01',
       discount: 0,
-      unitOfMeasure: 'Sp',
+      unitOfMeasure: item.unitOfMeasure ?? 'Sp',
+      cabysCode: item.cabysCode,
+      commercialCodeType: item.commercialCodeType,
+      commercialCode: item.commercialCode,
     })) ?? [];
 
     const xmlOpts: BuildXmlOptions = {

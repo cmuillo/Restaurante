@@ -19,8 +19,21 @@ const INACTIVITY_MS = Number(params.get('timeout') ?? 60) * 1000;
 
 export { i18n };
 
+function mapKioskOrderType(type: 'DINE_IN' | 'TO_GO' | null): 'dine_in' | 'takeout' | 'kiosk' {
+  if (type === 'DINE_IN') return 'dine_in';
+  if (type === 'TO_GO') return 'takeout';
+  return 'kiosk';
+}
+
+function getKioskErrorMessage(error: any): string {
+  const raw = error?.response?.data?.message;
+  if (Array.isArray(raw)) return raw.join(' ');
+  if (typeof raw === 'string') return raw;
+  return 'No se pudo crear la orden. Intenta de nuevo.';
+}
+
 export default function App() {
-  const { screen, language, cart, reset, touch, setConfirmedOrder } = useKioskStore();
+  const { screen, language, cart, reset, touch, setConfirmedOrder, orderType } = useKioskStore();
   const t = i18n[language] as typeof i18n.es;
 
   // Auto-reset por inactividad
@@ -43,19 +56,29 @@ export default function App() {
   });
 
   const placeOrder = useMutation({
-    mutationFn: (paymentMethod: 'CARD' | 'CASH') =>
-      api.post(`/kiosk/${BRANCH_ID}/orders`, {
-        branchId: BRANCH_ID,
-        type: useKioskStore.getState().orderType,
-        paymentMethod,
-        items: cart.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-          notes: i.notes,
-          modifiers: i.modifiers.map((m) => ({ modifierOptionId: m.modifierOptionId })),
-        })),
-      }),
-    onSuccess: (res) => setConfirmedOrder(res.data.orderNumber),
+    mutationFn: (_paymentMethod: 'CARD' | 'CASH') =>
+      api
+        .post(
+          `/kiosk/${BRANCH_ID}/orders`,
+          {
+            type: mapKioskOrderType(useKioskStore.getState().orderType),
+            items: cart.map((i) => ({
+              productId: i.productId,
+              productName: i.productName,
+              unitPrice: i.price,
+              quantity: i.quantity,
+              notes: i.notes,
+              modifiers: i.modifiers.map((m) => ({
+                modifierOptionId: m.modifierOptionId,
+                optionName: m.optionName,
+                extraPrice: m.extraPrice,
+              })),
+            })),
+          },
+          { headers: { 'X-Silent-Error': '1' } },
+        )
+        .then((r) => r.data),
+    onSuccess: (data) => setConfirmedOrder(String(data.orderNumber)),
   });
 
   const screenMap: Record<typeof screen, React.ReactNode> = {
@@ -65,7 +88,15 @@ export default function App() {
     MENU: <MenuScreen t={t} branchId={BRANCH_ID} />,
     PRODUCT_DETAIL: <ProductDetailScreen t={t} branchId={BRANCH_ID} />,
     CART: <CartScreen t={t} isPending={placeOrder.isPending} />,
-    PAYMENT: <PaymentScreen t={t} onPayment={(method) => placeOrder.mutate(method)} isPending={placeOrder.isPending} />,
+    PAYMENT: (
+      <PaymentScreen
+        t={t}
+        onPayment={(method) => placeOrder.mutate(method)}
+        isPending={placeOrder.isPending}
+        paymentError={placeOrder.isError ? getKioskErrorMessage(placeOrder.error) : ''}
+        orderType={orderType}
+      />
+    ),
     CONFIRMATION: <ConfirmationScreen t={t} onReset={reset} />,
   };
 

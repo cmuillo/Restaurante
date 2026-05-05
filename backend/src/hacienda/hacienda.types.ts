@@ -8,8 +8,12 @@ export interface LineItem {
   quantity: number;
   unitPrice: number;
   taxRate: number;      // porcentaje, ej: 13
+  taxCode?: string;     // codigo de impuesto Hacienda (ej: 01 IVA)
   discount?: number;    // monto descuento (no porcentaje)
   unitOfMeasure?: string; // 'Sp' para servicios, 'Und' para unidades
+  cabysCode?: string;
+  commercialCodeType?: string;
+  commercialCode?: string;
 }
 
 export interface BuildXmlOptions {

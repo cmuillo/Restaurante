@@ -45,6 +45,24 @@ export class Product {
   @Column({ nullable: true })
   sku: string;
 
+  @Column({ nullable: true, length: 13 })
+  cabysCode: string;
+
+  @Column({ nullable: true, length: 2 })
+  commercialCodeType: string;
+
+  @Column({ nullable: true, length: 50 })
+  commercialCode: string;
+
+  @Column({ nullable: true, length: 2 })
+  taxCode: string;
+
+  @Column('decimal', { precision: 5, scale: 2, nullable: true })
+  taxRate: number;
+
+  @Column({ nullable: true, length: 5 })
+  unitOfMeasure: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

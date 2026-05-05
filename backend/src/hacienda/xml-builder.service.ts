@@ -67,7 +67,14 @@ export class XmlBuilderService {
     opts.lines.forEach((line, i) => {
       const item = detalle.ele('LineaDetalle');
       item.ele('NumeroLinea').txt(String(i + 1));
-      item.ele('Codigo').ele('Tipo').txt('04').up().ele('Codigo').txt(String(i + 1));
+
+      const codeType = line.commercialCodeType ?? '04';
+      const codeValue = line.commercialCode ?? String(i + 1);
+      item.ele('Codigo').ele('Tipo').txt(codeType).up().ele('Codigo').txt(codeValue);
+      if (line.cabysCode) {
+        item.ele('CodigoCabys').txt(line.cabysCode);
+      }
+
       item.ele('Detalle').txt(line.productName);
       item.ele('UnidadMedida').txt(line.unitOfMeasure ?? 'Sp');
       item.ele('Cantidad').txt(String(line.quantity));
@@ -82,7 +89,7 @@ export class XmlBuilderService {
 
       if (line.taxRate > 0) {
         const imp = item.ele('Impuesto');
-        imp.ele('Codigo').txt('01'); // IVA
+        imp.ele('Codigo').txt(line.taxCode ?? '01'); // IVA por defecto
         imp.ele('CodigoTarifa').txt(this.ivaTarifaCodigo(line.taxRate));
         imp.ele('Tarifa').txt(String(line.taxRate));
         imp.ele('Monto').txt(this.fmt((line.unitPrice * line.quantity - (line.discount ?? 0)) * line.taxRate / 100));

@@ -21,11 +21,11 @@ export class BillingService {
     private readonly haciendaService: HaciendaService,
   ) {}
 
-  async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<Invoice> {
+  async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<any> {
     return this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(Order, {
         where: { id: dto.orderId },
-        relations: ['branch'],
+        relations: ['branch', 'items', 'table'],
       });
       if (!order) throw new NotFoundException('Orden no encontrada');
       if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
@@ -42,8 +42,11 @@ export class BillingService {
         });
       }
 
-      const cashReceived = dto.cashReceived || order.total;
-      const change = Math.max(0, cashReceived - order.total);
+      const orderTotal = Number(order.total || 0);
+      const orderTaxAmount = Number(order.taxAmount || 0);
+      const orderSubtotal = Number(order.subtotal || 0);
+      const cashReceived = Number(dto.cashReceived || orderTotal);
+      const change = Math.max(0, cashReceived - orderTotal);
 
       const invoice = manager.create(Invoice, {
         orderId: dto.orderId,
@@ -53,11 +56,11 @@ export class BillingService {
         customerName: dto.customerName,
         customerTaxId: dto.customerTaxId,
         customerAddress: dto.customerAddress,
-        subtotal: order.subtotal,
-        taxAmount: order.taxAmount,
+        subtotal: orderSubtotal,
+        taxAmount: orderTaxAmount,
         tipAmount: order.tipAmount,
         discountAmount: order.discountAmount,
-        total: order.total,
+        total: orderTotal,
         cashReceived,
         change,
       });
@@ -79,6 +82,28 @@ export class BillingService {
         newValue: { invoiceNumber, total: order.total, paymentMethod: dto.paymentMethod },
       });
 
+      const printableItems = (order.items || []).map((item) => {
+        const lineSubtotal = Number(item.subtotal || 0);
+        const explicitTaxRate = item.taxRate == null ? null : Number(item.taxRate);
+        const effectiveTaxRate = explicitTaxRate == null
+          ? (orderSubtotal > 0 ? (orderTaxAmount / orderSubtotal) * 100 : 0)
+          : explicitTaxRate;
+        const lineTaxAmount = lineSubtotal * (effectiveTaxRate / 100);
+
+        return {
+          productName: item.productName,
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice || 0),
+          subtotal: lineSubtotal,
+          taxRate: effectiveTaxRate,
+          taxAmount: lineTaxAmount,
+          total: lineSubtotal + lineTaxAmount,
+          notes: item.notes,
+          unitOfMeasure: item.unitOfMeasure,
+          cabysCode: item.cabysCode,
+        };
+      });
+
       // Enviar comprobante electrónico a Hacienda de forma asíncrona
       // (no bloquea la respuesta al cajero si Hacienda tarda o falla)
       setImmediate(() => {
@@ -87,7 +112,45 @@ export class BillingService {
           .catch((e) => this.logger.error(`Error enviando factura ${saved.id} a Hacienda: ${e.message}`));
       });
 
-      return saved;
+      return {
+        ...saved,
+        printable: {
+          issuer: {
+            name: order.branch?.name,
+            taxIdType: config?.haciendaTaxIdType,
+            taxId: config?.haciendaTaxId,
+            address: order.branch?.address,
+            phone: order.branch?.phone,
+            email: order.branch?.email,
+            province: config?.haciendaProvince,
+            canton: config?.haciendaCanton,
+            district: config?.haciendaDistrict,
+          },
+          invoice: {
+            invoiceNumber: saved.invoiceNumber,
+            issuedAt: saved.createdAt,
+            paymentMethod: saved.paymentMethod,
+            haciendaKey: saved.haciendaKey,
+            haciendaConsecutive: saved.haciendaConsecutive,
+          },
+          order: {
+            orderNumber: order.orderNumber,
+            type: order.type,
+            table: order.table?.number ? `Mesa ${order.table.number}` : null,
+            notes: order.notes,
+          },
+          items: printableItems,
+          totals: {
+            subtotal: orderSubtotal,
+            taxAmount: orderTaxAmount,
+            tipAmount: Number(order.tipAmount || 0),
+            discountAmount: Number(order.discountAmount || 0),
+            total: orderTotal,
+            cashReceived,
+            change,
+          },
+        },
+      };
     });
   }
 

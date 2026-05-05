@@ -2,12 +2,13 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Order, OrderStatus, OrderType } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemModifier } from './entities/order-item-modifier.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { Product } from '../menu/entities/product.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { AuditService } from '../audit/audit.service';
 
@@ -16,6 +17,7 @@ export class OrdersService {
   constructor(
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(OrderItem) private readonly itemRepository: Repository<OrderItem>,
+    @InjectRepository(Product) private readonly productRepository: Repository<Product>,
     private readonly dataSource: DataSource,
     private readonly gateway: RestaurantGateway,
     private readonly auditService: AuditService,
@@ -25,7 +27,20 @@ export class OrdersService {
     return this.dataSource.transaction(async (manager) => {
       // Calcular totales
       let subtotal = 0;
+      let taxAmount = 0;
+
+      const uniqueProductIds = [...new Set(dto.items.map((item) => item.productId))];
+      const products = uniqueProductIds.length > 0
+        ? await this.productRepository.findBy({ id: In(uniqueProductIds) })
+        : [];
+      const productsById = new Map(products.map((p) => [p.id, p]));
+
       const itemsData: Partial<OrderItem>[] = dto.items.map((item) => {
+        const product = productsById.get(item.productId);
+        if (!product) {
+          throw new BadRequestException(`Producto no encontrado para item ${item.productId}`);
+        }
+
         let itemTotal = item.unitPrice * item.quantity;
         const modifiers: Partial<OrderItemModifier>[] = (item.modifiers || []).map((mod) => {
           itemTotal += mod.extraPrice * item.quantity;
@@ -35,7 +50,13 @@ export class OrdersService {
             extraPrice: mod.extraPrice,
           };
         });
+
+        const lineTaxRate = product.taxRate == null ? dto.taxPercentage : Number(product.taxRate);
+        const lineTaxAmount = itemTotal * (lineTaxRate / 100);
+
         subtotal += itemTotal;
+        taxAmount += lineTaxAmount;
+
         return {
           productId: item.productId,
           productName: item.productName,
@@ -43,11 +64,17 @@ export class OrdersService {
           quantity: item.quantity,
           subtotal: itemTotal,
           notes: item.notes,
+          cabysCode: product.cabysCode,
+          commercialCodeType: product.commercialCodeType,
+          commercialCode: product.commercialCode,
+          taxCode: product.taxCode,
+          taxRate: lineTaxRate,
+          unitOfMeasure: product.unitOfMeasure,
           modifiers: modifiers as OrderItemModifier[],
         };
       });
 
-      const taxAmount = subtotal * (dto.taxPercentage / 100);
+      const effectiveTaxPercentage = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
       const tipAmount = subtotal * ((dto.tipPercentage ?? 0) / 100);
       const total = subtotal + taxAmount + tipAmount - (dto.discountAmount || 0);
 
@@ -67,7 +94,7 @@ export class OrdersService {
         userId,
         notes: dto.notes,
         subtotal,
-        taxPercentage: dto.taxPercentage,
+        taxPercentage: effectiveTaxPercentage,
         taxAmount,
         tipPercentage: dto.tipPercentage || 0,
         tipAmount,

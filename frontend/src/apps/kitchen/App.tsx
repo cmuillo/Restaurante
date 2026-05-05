@@ -2,10 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
-
-// El branchId se pasa por query string: ?branchId=xxx
-const params = new URLSearchParams(window.location.search);
-const BRANCH_ID = params.get('branchId') ?? '';
+import { useAuthStore } from '../../stores/auth.store';
 
 interface OrderItem {
   id: string;
@@ -21,8 +18,18 @@ interface Order {
   type: string;
   status: string;
   createdAt: string;
+  notes?: string;
   table?: { number: number };
   items: OrderItem[];
+}
+
+function sourceLabel(order: Order): string {
+  const type = String(order.type || '').toLowerCase();
+  if (type === 'kiosk') return 'Kiosko';
+  if (type === 'takeout') return 'Para llevar';
+  if (type === 'delivery') return 'Delivery';
+  if (order.table?.number) return `Mesa ${order.table.number}`;
+  return 'Sin mesa';
 }
 
 function elapsed(createdAt: string): string {
@@ -32,7 +39,7 @@ function elapsed(createdAt: string): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function OrderCard({ order, onReady }: { order: Order; onReady: (id: string) => void }) {
+function OrderCard({ order, onReady }: { order: Order; onReady: (order: Order) => void }) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -52,12 +59,17 @@ function OrderCard({ order, onReady }: { order: Order; onReady: (id: string) => 
       </div>
 
       <div className="text-xs text-gray-400 flex gap-2">
-        <span className="capitalize">{order.type.toLowerCase()}</span>
-        {order.table && <span>• Mesa {order.table.number}</span>}
-        <span className={`px-1.5 py-0.5 rounded text-white ${order.status === 'PENDING' ? 'bg-yellow-600' : 'bg-blue-600'}`}>
-          {order.status === 'PENDING' ? 'Nuevo' : 'En preparación'}
+        <span>{sourceLabel(order)}</span>
+        <span className={`px-1.5 py-0.5 rounded text-white ${order.status === 'pending' ? 'bg-yellow-600' : 'bg-blue-600'}`}>
+          {order.status === 'pending' ? 'Nuevo' : 'En preparación'}
         </span>
       </div>
+
+      {order.notes && (
+        <div className="text-xs text-yellow-300 bg-black/20 border border-yellow-700/40 rounded px-2 py-1">
+          📝 Nota: {order.notes}
+        </div>
+      )}
 
       <ul className="space-y-1.5">
         {order.items.map((item) => (
@@ -74,7 +86,7 @@ function OrderCard({ order, onReady }: { order: Order; onReady: (id: string) => 
       </ul>
 
       <button
-        onClick={() => onReady(order.id)}
+        onClick={() => onReady(order)}
         className="mt-auto py-2 bg-green-600 hover:bg-green-500 active:bg-green-700 rounded-lg font-semibold text-sm transition-colors"
       >
         ✅ Lista
@@ -85,26 +97,33 @@ function OrderCard({ order, onReady }: { order: Order; onReady: (id: string) => 
 
 export default function App() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const branchId = user?.branchId ?? '';
 
   const { data: orders = [] } = useQuery<Order[]>({
-    queryKey: ['kitchen-orders', BRANCH_ID],
+    queryKey: ['kitchen-orders', branchId],
     queryFn: () =>
-      api.get(`/kitchen/orders?branchId=${BRANCH_ID}`).then((r) => r.data),
-    enabled: !!BRANCH_ID,
+      api.get(`/kitchen/orders?branchId=${branchId}`).then((r) => r.data),
+    enabled: !!branchId,
     refetchInterval: 15_000,
   });
 
   useSocket({
-    branchId: BRANCH_ID,
+    branchId,
     events: {
       'kitchen:new_order': () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
       'order:status_updated': () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
     },
-    enabled: !!BRANCH_ID,
+    enabled: !!branchId,
   });
 
   const markReady = useMutation({
-    mutationFn: (id: string) => api.patch(`/orders/${id}/status`, { status: 'READY' }),
+    mutationFn: async (order: Order) => {
+      if (order.status === 'pending') {
+        await api.patch(`/orders/${order.id}/status?branchId=${branchId}`, { status: 'in_preparation' });
+      }
+      return api.patch(`/orders/${order.id}/status?branchId=${branchId}`, { status: 'ready' });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
   });
 
@@ -123,7 +142,7 @@ export default function App() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {orders.map((order) => (
-            <OrderCard key={order.id} order={order} onReady={(id) => markReady.mutate(id)} />
+            <OrderCard key={order.id} order={order} onReady={(o) => markReady.mutate(o)} />
           ))}
         </div>
       )}
