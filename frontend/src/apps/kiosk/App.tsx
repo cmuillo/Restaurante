@@ -2,9 +2,10 @@ import { useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useKioskStore } from './store/kiosk.store';
+import { useSettingsLoader } from '../../hooks/useSettings';
 import { i18n } from './i18n/strings';
 import WelcomeScreen from './screens/WelcomeScreen';
-import LanguageScreen from './screens/LanguageScreen';
+import CustomerScreen from './screens/CustomerScreen';
 import OrderTypeScreen from './screens/OrderTypeScreen';
 import MenuScreen from './screens/MenuScreen';
 import ProductDetailScreen from './screens/ProductDetailScreen';
@@ -33,8 +34,9 @@ function getKioskErrorMessage(error: any): string {
 }
 
 export default function App() {
-  const { screen, language, cart, reset, touch, setConfirmedOrder, orderType } = useKioskStore();
-  const t = i18n[language] as typeof i18n.es;
+  useSettingsLoader();
+  const { screen, cart, reset, touch, setConfirmedOrder, orderType } = useKioskStore();
+  const t = i18n.es;
 
   // Auto-reset por inactividad
   useEffect(() => {
@@ -62,6 +64,7 @@ export default function App() {
           `/kiosk/${BRANCH_ID}/orders`,
           {
             type: mapKioskOrderType(useKioskStore.getState().orderType),
+            customerId: useKioskStore.getState().customer?.id ?? undefined,
             items: cart.map((i) => ({
               productId: i.productId,
               productName: i.productName,
@@ -83,7 +86,7 @@ export default function App() {
 
   const screenMap: Record<typeof screen, React.ReactNode> = {
     WELCOME: <WelcomeScreen t={t} />,
-    LANGUAGE: <LanguageScreen />,
+    CUSTOMER: <CustomerScreen />,
     ORDER_TYPE: <OrderTypeScreen t={t} />,
     MENU: <MenuScreen t={t} branchId={BRANCH_ID} />,
     PRODUCT_DETAIL: <ProductDetailScreen t={t} branchId={BRANCH_ID} />,

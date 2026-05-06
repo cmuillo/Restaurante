@@ -20,8 +20,17 @@ export class ExpensesService {
       .createQueryBuilder('exp')
       .where('exp.branchId = :branchId', { branchId })
       .orderBy('exp.date', 'DESC');
-    if (from) query.andWhere('exp.date >= :from', { from });
-    if (to) query.andWhere('exp.date <= :to', { to });
+    if (from) {
+      const fromDate = new Date(from);
+      fromDate.setHours(0, 0, 0, 0);
+      query.andWhere('exp.date >= :from', { from: fromDate });
+    }
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setDate(toDate.getDate() + 1);
+      toDate.setHours(0, 0, 0, 0);
+      query.andWhere('exp.date < :to', { to: toDate });
+    }
     return query.getMany();
   }
 

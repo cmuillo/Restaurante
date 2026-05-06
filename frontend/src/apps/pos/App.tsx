@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
+import { useSettingsLoader } from '../../hooks/useSettings';
 import LoginPage from './pages/LoginPage';
 import PosPage from './pages/PosPage';
 
@@ -8,6 +9,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useSettingsLoader();
   return (
     <BrowserRouter basename="/pos">
       <Routes>

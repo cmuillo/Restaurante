@@ -3,11 +3,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  // Aumentar límite de body para soportar logos en base64 (~15 MB)
+  app.use(json({ limit: '20mb' }));
+  app.use(urlencoded({ limit: '20mb', extended: true }));
 
   // Security headers
   app.use(helmet());

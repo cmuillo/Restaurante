@@ -101,6 +101,12 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(5)
   unitOfMeasure?: string;
+
+  @ApiProperty({ required: false, description: 'Puntos que gana el cliente por cada unidad comprada' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pointsPerPurchase?: number;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

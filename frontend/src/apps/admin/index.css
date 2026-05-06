@@ -6,3 +6,57 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   @apply bg-gray-50 text-gray-900;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   TEMA OSCURO — Se activa cuando .dark está en el div raíz del admin
+   ────────────────────────────────────────────────────────────────── */
+.dark { color-scheme: dark; }
+
+.dark,
+.dark body {
+  background-color: #111827;
+  color: #f9fafb;
+}
+
+/* Fondos */
+.dark .bg-white          { background-color: #1f2937 !important; }
+.dark .bg-gray-50        { background-color: #111827 !important; }
+.dark .bg-gray-100       { background-color: #374151 !important; }
+.dark .bg-gray-200       { background-color: #4b5563 !important; }
+.dark .bg-brand-50       { background-color: #431407 !important; }
+
+/* Texto */
+.dark .text-gray-900     { color: #f9fafb !important; }
+.dark .text-gray-800     { color: #f3f4f6 !important; }
+.dark .text-gray-700     { color: #e5e7eb !important; }
+.dark .text-gray-600     { color: #d1d5db !important; }
+.dark .text-gray-500     { color: #9ca3af !important; }
+.dark .text-gray-400     { color: #6b7280 !important; }
+.dark .text-brand-700    { color: #fb923c !important; }
+
+/* Bordes */
+.dark .border-gray-100   { border-color: #374151 !important; }
+.dark .border-gray-200   { border-color: #374151 !important; }
+.dark .border-gray-300   { border-color: #4b5563 !important; }
+.dark .divide-gray-100 > * + * { border-color: #374151 !important; }
+.dark .divide-gray-200 > * + * { border-color: #374151 !important; }
+
+/* Inputs y selects */
+.dark input:not([type='color']),
+.dark select,
+.dark textarea {
+  background-color: #374151 !important;
+  border-color: #4b5563 !important;
+  color: #f9fafb !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #6b7280 !important; }
+
+/* Hover de filas y botones */
+.dark .hover\:bg-gray-50:hover  { background-color: #1f2937 !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #374151 !important; }
+
+/* Tables */
+.dark table th { background-color: #374151 !important; color: #f3f4f6 !important; }
+.dark table tr:hover td { background-color: #2d3748 !important; }
+

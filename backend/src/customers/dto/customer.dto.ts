@@ -21,6 +21,18 @@ export class CreateCustomerDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
+  taxId?: string;
+
+  @ApiProperty({ required: false, enum: ['01', '02', '03', '04'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  taxIdType?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   @MaxLength(300)
   address?: string;
 
@@ -53,6 +65,18 @@ export class UpdateCustomerDto {
   @IsString()
   @MaxLength(50)
   phone?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  taxId?: string;
+
+  @ApiProperty({ required: false, enum: ['01', '02', '03', '04'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  taxIdType?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

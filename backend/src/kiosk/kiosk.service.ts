@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../menu/entities/category.entity';
@@ -6,12 +7,17 @@ import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { OrdersService } from '../orders/orders.service';
 import { CreateKioskOrderDto } from './dto/create-kiosk-order.dto';
 import { OrderType } from '../orders/entities/order.entity';
+import { Customer } from '../customers/entities/customer.entity';
+import { KioskQuickRegisterDto } from './dto/kiosk-customer.dto';
+import * as QRCode from 'qrcode';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class KioskService {
   constructor(
     @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
     @InjectRepository(BranchConfig) private readonly configRepository: Repository<BranchConfig>,
+    @InjectRepository(Customer) private readonly customerRepository: Repository<Customer>,
     private readonly ordersService: OrdersService,
   ) {}
 
@@ -76,5 +82,85 @@ export class KioskService {
     );
 
     return { orderNumber: order.orderNumber, total: order.total };
+  }
+
+  /**
+   * Busca un cliente por su código (para lectura de QR en el kiosko).
+   */
+  async findCustomerByCode(code: string): Promise<Pick<Customer, 'id' | 'code' | 'name' | 'email' | 'loyaltyPoints'>> {
+    const customer = await this.customerRepository.findOne({ where: { code, isActive: true } });
+    if (!customer) throw new NotFoundException('Cliente no encontrado');
+    return { id: customer.id, code: customer.code, name: customer.name, email: customer.email, loyaltyPoints: customer.loyaltyPoints };
+  }
+
+  /**
+   * Registro rápido desde el kiosko: crea el cliente y envía el QR por email.
+   */
+  async quickRegister(dto: KioskQuickRegisterDto): Promise<{
+    message: string;
+    emailSent: boolean;
+    code: string;
+    qrDataUrl: string;
+    customer: Pick<Customer, 'id' | 'code' | 'name' | 'loyaltyPoints'>;
+  }> {
+    if (dto.email) {
+      const existing = await this.customerRepository.findOne({ where: { email: dto.email } });
+      if (existing) throw new ConflictException('Ya existe una cuenta con ese email');
+    }
+
+    const count = await this.customerRepository.count();
+    const code = `CUST-${String(count + 1).padStart(5, '0')}`;
+    const customer = await this.customerRepository.save(
+      this.customerRepository.create({ name: dto.name, email: dto.email, phone: dto.phone, code }),
+    );
+
+    const qrDataUrl = await QRCode.toDataURL(customer.code, { width: 300, margin: 2 });
+    let emailSent = false;
+    if (dto.email && process.env.SMTP_HOST) {
+      try {
+        const base64Image = qrDataUrl.split(',')[1];
+        const smtpPass = String(process.env.SMTP_PASS ?? '').replace(/\s+/g, '');
+
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT ?? 587),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: { user: process.env.SMTP_USER, pass: smtpPass },
+        });
+
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+          to: dto.email,
+          subject: '¡Tu código QR de fidelidad está listo! 🎉',
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#fff;border-radius:12px;border:1px solid #e5e7eb">
+              <h2 style="color:#ea580c;margin:0 0 8px">¡Bienvenido, ${customer.name}!</h2>
+              <p style="color:#4b5563">Tu código de cliente es: <strong style="font-size:1.2em">${customer.code}</strong></p>
+              <p style="color:#4b5563">Presenta el siguiente código QR en el kiosko para acumular puntos en tus pedidos:</p>
+              <div style="text-align:center;margin:24px 0">
+                <img src="cid:qrcode" alt="QR Code" style="width:200px;height:200px;border-radius:8px" />
+              </div>
+              <p style="color:#9ca3af;font-size:0.85em;text-align:center">Puntos actuales: ${customer.loyaltyPoints}</p>
+            </div>`,
+          attachments: [{ filename: 'qr.png', content: base64Image, encoding: 'base64', cid: 'qrcode' }],
+        });
+        emailSent = true;
+      } catch (_) {
+        // Email falla silenciosamente — el registro ya fue creado
+      }
+    }
+
+    return {
+      message: `Registro exitoso. Tu código es ${customer.code}.`,
+      emailSent,
+      code: customer.code,
+      qrDataUrl,
+      customer: {
+        id: customer.id,
+        code: customer.code,
+        name: customer.name,
+        loyaltyPoints: customer.loyaltyPoints,
+      },
+    };
   }
 }

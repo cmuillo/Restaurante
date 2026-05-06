@@ -8,10 +8,11 @@ import { ProductModifier } from '../menu/entities/product-modifier.entity';
 import { ModifierOption } from '../menu/entities/modifier-option.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { OrdersModule } from '../orders/orders.module';
+import { Customer } from '../customers/entities/customer.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Category, Product, ProductModifier, ModifierOption, BranchConfig]),
+    TypeOrmModule.forFeature([Category, Product, ProductModifier, ModifierOption, BranchConfig, Customer]),
     OrdersModule,
   ],
   controllers: [KioskController],

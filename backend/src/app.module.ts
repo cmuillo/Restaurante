@@ -18,6 +18,7 @@ import { CustomersModule } from './customers/customers.module';
 import { KioskModule } from './kiosk/kiosk.module';
 import { AuditModule } from './audit/audit.module';
 import { WebsocketsModule } from './websockets/websockets.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { WebsocketsModule } from './websockets/websockets.module';
     KioskModule,
     AuditModule,
     WebsocketsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

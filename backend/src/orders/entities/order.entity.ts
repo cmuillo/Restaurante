@@ -88,6 +88,12 @@ export class Order {
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   discountAmount: number;
 
+  @Column({ default: 0 })
+  pointsUsed: number; // puntos usados en esta orden como descuento
+
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  pointsDiscount: number; // valor en dinero de los puntos usados
+
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   total: number;
 

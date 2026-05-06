@@ -5,11 +5,13 @@ import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { Order } from '../orders/entities/order.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
+import { Product } from '../menu/entities/product.entity';
 import { AuditModule } from '../audit/audit.module';
 import { HaciendaModule } from '../hacienda/hacienda.module';
+import { CustomersModule } from '../customers/customers.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig]), AuditModule, HaciendaModule],
+  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig, Product]), AuditModule, HaciendaModule, CustomersModule],
   controllers: [BillingController],
   providers: [BillingService],
   exports: [BillingService],

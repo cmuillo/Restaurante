@@ -1,7 +1,7 @@
 ﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import api from '../../../lib/api';
-import { useAuthStore } from '../../../stores/auth.store';
+import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
 import { parseApiFormErrors } from '../../../lib/formErrors';
 
 type InventoryItem = { id: string; name: string; unit: string; currentStock: number; minStock: number; costPerUnit: number };
@@ -28,8 +28,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export default function InventoryPage() {
-  const { user } = useAuthStore();
-  const branchId = user?.branchId ?? '';
+  const branchId = useActiveBranchId();
   const qc = useQueryClient();
 
   const [showItemModal, setShowItemModal] = useState(false);

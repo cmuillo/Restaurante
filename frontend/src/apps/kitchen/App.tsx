@@ -26,8 +26,10 @@ interface Order {
 function sourceLabel(order: Order): string {
   const type = String(order.type || '').toLowerCase();
   if (type === 'kiosk') return 'Kiosko';
-  if (type === 'takeout') return 'Para llevar';
+  if (type === 'takeout' || type === 'to_go') return 'Para llevar';
   if (type === 'delivery') return 'Delivery';
+  // En kiosko "comer aqui" se registra como dine_in y no tiene mesa asignada.
+  if ((type === 'dine_in' || type === 'dinein') && !order.table?.number) return 'Kiosko';
   if (order.table?.number) return `Mesa ${order.table.number}`;
   return 'Sin mesa';
 }

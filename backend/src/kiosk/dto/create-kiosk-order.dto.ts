@@ -1,5 +1,5 @@
 import {
-  IsEnum, IsArray, IsNotEmpty, ValidateNested,
+  IsEnum, IsArray, IsNotEmpty, ValidateNested, IsOptional, IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -10,6 +10,11 @@ export class CreateKioskOrderDto {
   @ApiProperty({ enum: [OrderType.KIOSK, OrderType.TAKEOUT, OrderType.DINE_IN] })
   @IsEnum([OrderType.KIOSK, OrderType.TAKEOUT, OrderType.DINE_IN])
   type: OrderType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
 
   @ApiProperty({ type: [CreateOrderItemDto] })
   @IsArray()

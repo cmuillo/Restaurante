@@ -13,6 +13,17 @@ export class ReportsService {
     @InjectRepository(Expense) private readonly expenseRepository: Repository<Expense>,
   ) {}
 
+  private normalizeDateRange(from: Date, to: Date): { fromStart: Date; toExclusive: Date } {
+    const fromStart = new Date(from);
+    fromStart.setHours(0, 0, 0, 0);
+
+    const toExclusive = new Date(to);
+    toExclusive.setDate(toExclusive.getDate() + 1);
+    toExclusive.setHours(0, 0, 0, 0);
+
+    return { fromStart, toExclusive };
+  }
+
   /** Resumen diario de ventas */
   async dailySales(branchId: string, date: Date) {
     const startOfDay = new Date(date);
@@ -29,7 +40,10 @@ export class ReportsService {
         'SUM(inv.taxAmount) AS tax_amount',
         'SUM(inv.tipAmount) AS tip_amount',
         'SUM(inv.discountAmount) AS discount_amount',
+        'SUM(order.pointsDiscount) AS points_discount',
         'SUM(inv.total) AS total_sales',
+        "SUM(CASE WHEN inv.paymentMethod = 'cash' THEN inv.total ELSE 0 END) AS cash_sales",
+        "SUM(CASE WHEN inv.paymentMethod = 'card' THEN inv.total ELSE 0 END) AS card_sales",
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('inv.createdAt BETWEEN :start AND :end', { start: startOfDay, end: endOfDay })
@@ -45,11 +59,16 @@ export class ReportsService {
       totalTax: parseFloat(raw?.tax_amount ?? '0'),
       totalTip: parseFloat(raw?.tip_amount ?? '0'),
       totalDiscount: parseFloat(raw?.discount_amount ?? '0'),
+      pointsDiscount: parseFloat(raw?.points_discount ?? '0'),
+      cashSales: parseFloat(raw?.cash_sales ?? '0'),
+      cardSales: parseFloat(raw?.card_sales ?? '0'),
     };
   }
 
   /** Ventas por rango de fechas con desglose diario */
   async salesByRange(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
     const rows = await this.invoiceRepository
       .createQueryBuilder('inv')
       .leftJoin('inv.order', 'order')
@@ -58,9 +77,11 @@ export class ReportsService {
         'COUNT(inv.id) AS invoices',
         'SUM(inv.total) AS total',
         'SUM(inv.taxAmount) AS tax',
+        'SUM(order.pointsDiscount) AS points_discount',
       ])
       .where('order.branchId = :branchId', { branchId })
-      .andWhere('inv.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('inv.createdAt >= :from', { from: fromStart })
+      .andWhere('inv.createdAt < :to', { to: toExclusive })
       .andWhere("inv.status = 'issued'")
       .groupBy("DATE(inv.createdAt)")
       .orderBy("DATE(inv.createdAt)", 'ASC')
@@ -71,11 +92,17 @@ export class ReportsService {
       orderCount: parseInt(r.invoices, 10),
       total: parseFloat(r.total ?? '0'),
       tax: parseFloat(r.tax ?? '0'),
+      pointsDiscount: parseFloat(r.points_discount ?? '0'),
     }));
 
     const totals = dailyBreakdown.reduce(
-      (acc, r) => ({ total: acc.total + r.total, tax: acc.tax + r.tax, orders: acc.orders + r.orderCount }),
-      { total: 0, tax: 0, orders: 0 },
+      (acc, r) => ({
+        total: acc.total + r.total,
+        tax: acc.tax + r.tax,
+        pointsDiscount: acc.pointsDiscount + r.pointsDiscount,
+        orders: acc.orders + r.orderCount,
+      }),
+      { total: 0, tax: 0, pointsDiscount: 0, orders: 0 },
     );
 
     return { dailyBreakdown, ...totals };
@@ -83,6 +110,8 @@ export class ReportsService {
 
   /** Productos más vendidos */
   async topProducts(branchId: string, from: Date, to: Date, limit = 10) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
     const rows = await this.orderRepository
       .createQueryBuilder('order')
       .leftJoin('order.items', 'item')
@@ -94,7 +123,8 @@ export class ReportsService {
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('order.status = :status', { status: OrderStatus.COMPLETED })
-      .andWhere('order.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('order.createdAt >= :from', { from: fromStart })
+      .andWhere('order.createdAt < :to', { to: toExclusive })
       .groupBy('item.productId, item.productName')
       .orderBy('total_quantity', 'DESC')
       .limit(limit)
@@ -110,6 +140,8 @@ export class ReportsService {
 
   /** Horas pico — cantidad de órdenes por hora del día */
   async peakHours(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
     const rows = await this.orderRepository
       .createQueryBuilder('order')
       .select([
@@ -119,7 +151,8 @@ export class ReportsService {
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('order.status = :status', { status: OrderStatus.COMPLETED })
-      .andWhere('order.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('order.createdAt >= :from', { from: fromStart })
+      .andWhere('order.createdAt < :to', { to: toExclusive })
       .groupBy("EXTRACT(HOUR FROM order.createdAt)")
       .orderBy('hour', 'ASC')
       .getRawMany();
@@ -133,20 +166,24 @@ export class ReportsService {
 
   /** Gastos vs ingresos — P&G simplificado */
   async profitLoss(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
     const [salesData, expensesData] = await Promise.all([
       this.invoiceRepository
         .createQueryBuilder('inv')
         .leftJoin('inv.order', 'order')
         .select(['SUM(inv.total) AS total_sales', 'SUM(inv.taxAmount) AS total_tax'])
         .where('order.branchId = :branchId', { branchId })
-        .andWhere('inv.createdAt BETWEEN :from AND :to', { from, to })
+        .andWhere('inv.createdAt >= :from', { from: fromStart })
+        .andWhere('inv.createdAt < :to', { to: toExclusive })
         .andWhere("inv.status = 'issued'")
         .getRawOne(),
       this.expenseRepository
         .createQueryBuilder('exp')
         .select(['SUM(exp.amount) AS total_expenses', 'exp.category AS category'])
         .where('exp.branchId = :branchId', { branchId })
-        .andWhere('exp.date BETWEEN :from AND :to', { from, to })
+        .andWhere('exp.date >= :from', { from: fromStart })
+        .andWhere('exp.date < :to', { to: toExclusive })
         .groupBy('exp.category')
         .getRawMany(),
     ]);

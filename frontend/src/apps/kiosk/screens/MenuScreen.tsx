@@ -3,9 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/api';
 import { useKioskStore } from '../store/kiosk.store';
 import type { Strings } from '../i18n/strings';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 export default function MenuScreen({ t, branchId }: { t: Strings; branchId: string }) {
-  const { goTo, selectProduct, cart } = useKioskStore();
+  const { goTo, selectProduct, cart, customer } = useKioskStore();
+  const settings = useSettings();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
   const { data: menu } = useQuery({
@@ -36,10 +39,25 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
           >
             <span className="text-lg">🛒</span>
             <span className="font-bold text-white">{cartCount}</span>
-            <span className="text-white font-semibold">${cartTotal.toFixed(2)}</span>
+            <span className="text-white font-semibold">{formatCurrency(cartTotal, settings)}</span>
           </button>
         )}
       </div>
+
+      {customer && (
+        <div className="flex items-center justify-between px-6 py-3 bg-brand-950/50 border-b border-brand-800">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⭐</span>
+            <div>
+              <p className="text-white font-semibold">{customer.name}</p>
+              <p className="text-brand-300 text-sm">Cliente identificado: {customer.code}</p>
+            </div>
+          </div>
+          <div className="px-4 py-2 rounded-full bg-brand-900 text-brand-200 font-bold">
+            {customer.loyaltyPoints} puntos
+          </div>
+        </div>
+      )}
 
       {/* Categorías */}
       <div className="flex gap-3 px-4 py-3 overflow-x-auto bg-gray-800 border-b border-gray-700">
@@ -72,7 +90,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
               ? <img src={p.imageUrl} alt={p.name} className="w-full h-32 object-cover rounded-xl mb-3" />
               : <div className="w-full h-32 bg-gray-700 rounded-xl mb-3 flex items-center justify-center text-5xl">🍽️</div>}
             <p className="text-base font-semibold text-white line-clamp-2">{p.name}</p>
-            <p className="text-xl font-bold text-brand-400 mt-1">${p.price}</p>
+            <p className="text-xl font-bold text-brand-400 mt-1">{formatCurrency(p.price, settings)}</p>
           </button>
         ))}
       </div>

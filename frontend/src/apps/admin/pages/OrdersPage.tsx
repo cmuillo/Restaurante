@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/api';
-import { useAuthStore } from '../../../stores/auth.store';
+import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
 import { useSocket } from '../../../hooks/useSocket';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -58,8 +60,8 @@ function toDateInputValue(d: Date): string {
 }
 
 export default function OrdersPage() {
-  const { user } = useAuthStore();
-  const branchId = user?.branchId ?? '';
+  const branchId = useActiveBranchId();
+  const settings = useSettings();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
@@ -189,8 +191,9 @@ export default function OrdersPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <div className="max-h-[calc(100vh-300px)] overflow-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
             <tr>
               {['#', 'Tipo', 'Mesa', 'Estado', 'Total', 'Hora'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
@@ -204,9 +207,9 @@ export default function OrdersPage() {
               id: string; orderNumber: string; type: string; table?: { number: number }; status: string; total: number; createdAt: string; userId?: string | null
             }) => (
               <tr key={o.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono font-medium">{o.orderNumber}</td>
+                <td className="px-4 py-3 font-mono font-medium whitespace-nowrap">{o.orderNumber}</td>
                 <td className="px-4 py-3 capitalize text-gray-600">{o.type.toLowerCase()}</td>
-                <td className="px-4 py-3 text-gray-600">
+                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                   {o.type === 'kiosk'
                     ? 'Kiosko'
                     : o.type === 'takeout'
@@ -222,14 +225,15 @@ export default function OrdersPage() {
                     {STATUS_LABELS[o.status] ?? o.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 font-medium">${Number(o.total).toFixed(2)}</td>
-                <td className="px-4 py-3 text-gray-500">
+                <td className="px-4 py-3 font-medium whitespace-nowrap">{formatCurrency(Number(o.total), settings)}</td>
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                   {new Date(o.createdAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
         {filteredOrders.length === 0 && (
           <p className="text-center text-gray-400 py-12">No hay órdenes para mostrar.</p>
         )}

@@ -1,5 +1,7 @@
 import { useKioskStore } from '../store/kiosk.store';
 import type { Strings } from '../i18n/strings';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 export default function PaymentScreen({
   t,
@@ -15,6 +17,7 @@ export default function PaymentScreen({
   orderType: 'DINE_IN' | 'TO_GO' | null;
 }) {
   const { goTo, cart } = useKioskStore();
+  const settings = useSettings();
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   const cardDisabled = true;
@@ -28,7 +31,7 @@ export default function PaymentScreen({
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-10">
-        <p className="text-5xl font-black text-brand-400">${total.toFixed(2)}</p>
+        <p className="text-5xl font-black text-brand-400">{formatCurrency(total, settings)}</p>
 
         <div className="flex gap-10">
           <button

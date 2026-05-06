@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { KioskService } from './kiosk.service';
 import { CreateKioskOrderDto } from './dto/create-kiosk-order.dto';
+import { KioskQuickRegisterDto } from './dto/kiosk-customer.dto';
 
 /**
  * Endpoints públicos del kiosko — SIN autenticación.
@@ -28,5 +29,19 @@ export class KioskController {
     @Body() dto: CreateKioskOrderDto,
   ) {
     return this.kioskService.createOrder(branchId, dto);
+  }
+
+  @Get('customers/code/:code')
+  @ApiOperation({ summary: 'Buscar cliente por código QR (público, sin auth)' })
+  findCustomerByCode(@Param('code') code: string) {
+    return this.kioskService.findCustomerByCode(code);
+  }
+
+  @Post('customers/quick-register')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ medium: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Registro rápido de cliente desde kiosko (público, sin auth)' })
+  quickRegister(@Body() dto: KioskQuickRegisterDto) {
+    return this.kioskService.quickRegister(dto);
   }
 }

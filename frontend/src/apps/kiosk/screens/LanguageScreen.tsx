@@ -7,7 +7,7 @@ const LANGUAGES = [
 ];
 
 export default function LanguageScreen() {
-  const { setLanguage } = useKioskStore();
+  const { goTo } = useKioskStore();
   const t = i18n.es;
 
   return (
@@ -17,7 +17,7 @@ export default function LanguageScreen() {
         {LANGUAGES.map((lang) => (
           <button
             key={lang.code}
-            onClick={() => setLanguage(lang.code)}
+            onClick={() => goTo('ORDER_TYPE')}
             className="flex flex-col items-center gap-4 bg-gray-800 hover:bg-brand-700 active:scale-95 border-2 border-gray-700 hover:border-brand-500 rounded-3xl p-10 transition-all w-52"
           >
             <span className="text-6xl">{lang.label.split(' ')[0]}</span>

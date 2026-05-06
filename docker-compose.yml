@@ -56,6 +56,12 @@ services:
       JWT_REFRESH_EXPIRES_IN: 7d
       FRONTEND_URL: http://localhost:5173
       KIOSK_URL: http://localhost:5174
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_SECURE: 'false'
+      SMTP_USER: christopherrmg@gmail.com
+      SMTP_PASS: rczp pwvs btof zzga
+      SMTP_FROM: Restaurante <christopherrmg@gmail.com>
     ports:
       - '3000:3000'
     volumes:

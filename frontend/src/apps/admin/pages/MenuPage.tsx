@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import api from '../../../lib/api';
-import { useAuthStore } from '../../../stores/auth.store';
+import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 import { parseApiFormErrors } from '../../../lib/formErrors';
 
 type Category = { id: string; name: string; description?: string; sortOrder?: number };
@@ -15,6 +17,7 @@ type Product = {
   description?: string;
   categoryId?: string;
   allergens?: string[];
+  pointsPerPurchase?: number;
   showInKiosk?: boolean;
   cabysCode?: string;
   commercialCodeType?: string;
@@ -79,9 +82,9 @@ function Modal({
 }
 
 export default function MenuPage() {
-  const { user } = useAuthStore();
-  const branchId = user?.branchId ?? '';
+  const branchId = useActiveBranchId();
   const qc = useQueryClient();
+    const settings = useSettings();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
 
@@ -102,6 +105,7 @@ export default function MenuPage() {
     categoryId: '',
     imageUrl: '',
     allergensText: '',
+    pointsPerPurchase: '',
     isActive: true,
     showInKiosk: true,
     cabysCode: '',
@@ -204,6 +208,7 @@ export default function MenuPage() {
       categoryId: activeCategory ?? '',
       imageUrl: '',
       allergensText: '',
+      pointsPerPurchase: '',
       isActive: true,
       showInKiosk: true,
       cabysCode: '',
@@ -227,8 +232,7 @@ export default function MenuPage() {
       sku: p.sku ?? '',
       categoryId: p.categoryId ?? '',
       imageUrl: p.imageUrl ?? '',
-      allergensText: (p.allergens ?? []).join(', '),
-      isActive: p.isActive,
+      allergensText: (p.allergens ?? []).join(', '),      pointsPerPurchase: p.pointsPerPurchase === undefined ? '' : String(p.pointsPerPurchase),      isActive: p.isActive,
       showInKiosk: p.showInKiosk ?? true,
       cabysCode: p.cabysCode ?? '',
       commercialCodeType: p.commercialCodeType ?? '04',
@@ -276,6 +280,7 @@ export default function MenuPage() {
       categoryId: prodForm.categoryId,
       imageUrl: prodForm.imageUrl || undefined,
       allergens,
+      pointsPerPurchase: prodForm.pointsPerPurchase === '' ? 0 : Number(prodForm.pointsPerPurchase),
       isActive: prodForm.isActive,
       showInKiosk: prodForm.showInKiosk,
       cabysCode: prodForm.cabysCode || undefined,
@@ -355,7 +360,7 @@ export default function MenuPage() {
               )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 truncate">{p.name}</p>
-                <p className="text-sm text-brand-600 font-semibold">${p.price}</p>
+                <p className="text-sm text-brand-600 font-semibold">{formatCurrency(p.price, settings)}</p>
                 {p.sku && <p className="text-xs text-gray-400">Cod: {p.sku}</p>}
                 {p.cabysCode && <p className="text-[11px] text-gray-500">CABYS: {p.cabysCode}</p>}
                 {p.showInKiosk === false && <p className="text-[11px] text-amber-600">No visible en kiosko</p>}
@@ -457,6 +462,13 @@ export default function MenuPage() {
                       value={prodForm.allergensText} onChange={(e) => { setProdForm({ ...prodForm, allergensText: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, allergens: '' })); }} placeholder="gluten, lactosa, nueces" />
                     <p className="text-xs text-gray-500 mt-1">Separar por comas para cumplimiento informativo al consumidor.</p>
                     {prodFieldErrors.allergens && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.allergens}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Puntos por compra</label>
+                    <input type="number" min="0" step="1" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      value={prodForm.pointsPerPurchase} onChange={(e) => { setProdForm({ ...prodForm, pointsPerPurchase: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, pointsPerPurchase: '' })); }} placeholder="0" />
+                    <p className="text-xs text-gray-500 mt-1">Puntos que gana el cliente por cada unidad comprada</p>
+                    {prodFieldErrors.pointsPerPurchase && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.pointsPerPurchase}</p>}
                   </div>
                 </div>
               </div>

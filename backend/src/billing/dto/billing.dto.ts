@@ -39,4 +39,17 @@ export class CreateInvoiceDto {
   @IsNumber()
   @Min(0)
   cashReceived?: number;
+
+  @ApiProperty({ required: false, description: 'Puntos a usar como descuento' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pointsUsed?: number;
+}
+
+export class CreateCreditNoteDto {
+  @ApiProperty({ description: 'Motivo de la nota de credito' })
+  @IsString()
+  @MaxLength(300)
+  reason: string;
 }

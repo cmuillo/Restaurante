@@ -3,9 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/api';
 import { useKioskStore } from '../store/kiosk.store';
 import type { Strings } from '../i18n/strings';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 export default function ProductDetailScreen({ t, branchId }: { t: Strings; branchId: string }) {
   const { selectedProductId, addToCart, goTo } = useKioskStore();
+  const settings = useSettings();
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string>>({});
@@ -87,7 +90,7 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
                     }`}
                   >
                     {opt.name}
-                    {opt.extraPrice > 0 && <span className="ml-1 text-brand-300">+${opt.extraPrice}</span>}
+                    {opt.extraPrice > 0 && <span className="ml-1 text-brand-300">+{formatCurrency(opt.extraPrice, settings)}</span>}
                   </button>
                 ))}
               </div>
@@ -120,7 +123,7 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
           onClick={handleAdd}
           className="flex-1 py-5 bg-brand-600 hover:bg-brand-500 active:scale-95 rounded-2xl font-bold text-xl text-white transition-all"
         >
-          {t.addToOrder} — ${unitTotal.toFixed(2)}
+          {t.addToOrder} — {formatCurrency(unitTotal, settings)}
         </button>
       </div>
     </div>

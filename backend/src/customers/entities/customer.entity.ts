@@ -13,6 +13,9 @@ export class Customer {
   @Column({ length: 150 })
   name: string;
 
+  @Column({ length: 50, unique: true, nullable: true })
+  code: string; // código autoincremental CUST-00001
+
   @Column({ length: 150, unique: true, nullable: true })
   email: string;
 
@@ -21,6 +24,9 @@ export class Customer {
 
   @Column({ nullable: true })
   taxId: string; // RFC, NIT, RUC, etc.
+
+  @Column({ length: 2, nullable: true })
+  taxIdType: string; // '01' Física, '02' Jurídica, '03' DIMEX, '04' NITE
 
   @Column({ type: 'text', nullable: true })
   address: string;

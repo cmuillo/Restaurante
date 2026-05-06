@@ -63,6 +63,9 @@ export class Product {
   @Column({ nullable: true, length: 5 })
   unitOfMeasure: string;
 
+  @Column({ default: 0 })
+  pointsPerPurchase: number; // puntos a ganar por cada unidad comprada
+
   @CreateDateColumn()
   createdAt: Date;
 

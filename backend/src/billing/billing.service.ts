@@ -7,6 +7,9 @@ import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { AuditService } from '../audit/audit.service';
 import { CreateInvoiceDto } from './dto/billing.dto';
 import { HaciendaService } from '../hacienda/hacienda.service';
+import { CustomersService } from '../customers/customers.service';
+import { Customer } from '../customers/entities/customer.entity';
+import { Product } from '../menu/entities/product.entity';
 
 @Injectable()
 export class BillingService {
@@ -16,16 +19,18 @@ export class BillingService {
     @InjectRepository(Invoice) private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(BranchConfig) private readonly configRepository: Repository<BranchConfig>,
+    @InjectRepository(Product) private readonly productRepository: Repository<Product>,
     private readonly dataSource: DataSource,
     private readonly auditService: AuditService,
     private readonly haciendaService: HaciendaService,
+    private readonly customersService: CustomersService,
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<any> {
     return this.dataSource.transaction(async (manager) => {
       const order = await manager.findOne(Order, {
         where: { id: dto.orderId },
-        relations: ['branch', 'items', 'table'],
+        relations: ['branch', 'items', 'table', 'customer'],
       });
       if (!order) throw new NotFoundException('Orden no encontrada');
       if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
@@ -42,9 +47,27 @@ export class BillingService {
         });
       }
 
-      const orderTotal = Number(order.total || 0);
-      const orderTaxAmount = Number(order.taxAmount || 0);
-      const orderSubtotal = Number(order.subtotal || 0);
+      let orderTotal = Number(order.total || 0);
+      let orderTaxAmount = Number(order.taxAmount || 0);
+      let orderSubtotal = Number(order.subtotal || 0);
+      let pointsDiscount = 0;
+      let pointsUsed = 0;
+
+      // Procesar puntos si el cliente existe
+      if (order.customerId && dto.pointsUsed && dto.pointsUsed > 0) {
+        const customer = await manager.findOne(Customer, { where: { id: order.customerId } });
+        if (customer && customer.loyaltyPoints >= dto.pointsUsed) {
+          // Asumir 1 punto = 1 unidad de moneda para descuento
+          pointsDiscount = Math.min(Number(dto.pointsUsed), orderTotal);
+          orderTotal = Math.max(0, orderTotal - pointsDiscount);
+          pointsUsed = dto.pointsUsed;
+
+          // Deducir puntos usados del cliente
+          await manager.update(Customer, { id: order.customerId }, {
+            loyaltyPoints: customer.loyaltyPoints - pointsUsed,
+          });
+        }
+      }
       const cashReceived = Number(dto.cashReceived || orderTotal);
       const change = Math.max(0, cashReceived - orderTotal);
 
@@ -53,19 +76,47 @@ export class BillingService {
         invoiceNumber,
         paymentMethod: dto.paymentMethod,
         paymentDetails: dto.paymentDetails,
-        customerName: dto.customerName,
-        customerTaxId: dto.customerTaxId,
-        customerAddress: dto.customerAddress,
+        customerName: dto.customerName || order.customer?.name || 'Consumidor final',
+        customerTaxId: dto.customerTaxId || order.customer?.taxId || undefined,
+        customerAddress: dto.customerAddress || order.customer?.address || undefined,
         subtotal: orderSubtotal,
         taxAmount: orderTaxAmount,
         tipAmount: order.tipAmount,
-        discountAmount: order.discountAmount,
+        discountAmount: order.discountAmount + pointsDiscount,
         total: orderTotal,
         cashReceived,
         change,
       });
 
       const saved = await manager.save(Invoice, invoice);
+
+      // Actualizar orden con puntos usados
+      if (pointsUsed > 0) {
+        await manager.update(Order, dto.orderId, {
+          pointsUsed,
+          pointsDiscount,
+        });
+      }
+
+      // Calcular y acumular puntos ganados basado en los items
+      if (order.customerId && order.items && order.items.length > 0) {
+        let pointsEarned = 0;
+        for (const item of order.items) {
+          const product = await manager.findOne(Product, { where: { id: item.productId } });
+          if (product) {
+            pointsEarned += (product.pointsPerPurchase || 0) * Number(item.quantity || 0);
+          }
+        }
+        if (pointsEarned > 0) {
+          await manager.increment(Customer, { id: order.customerId }, 'loyaltyPoints', pointsEarned);
+          await manager.save('loyalty_transactions', {
+            customerId: order.customerId,
+            points: pointsEarned,
+            description: `Puntos ganados por compra - Factura ${invoiceNumber}`,
+            relatedOrderId: dto.orderId,
+          });
+        }
+      }
 
       // Cerrar la orden
       await manager.update(Order, dto.orderId, {
@@ -138,13 +189,21 @@ export class BillingService {
             type: order.type,
             table: order.table?.number ? `Mesa ${order.table.number}` : null,
             notes: order.notes,
+            customer: order.customer ? {
+              name: order.customer.name,
+              code: order.customer.code,
+              email: order.customer.email,
+              loyaltyPoints: order.customer.loyaltyPoints,
+            } : null,
           },
           items: printableItems,
           totals: {
             subtotal: orderSubtotal,
             taxAmount: orderTaxAmount,
             tipAmount: Number(order.tipAmount || 0),
-            discountAmount: Number(order.discountAmount || 0),
+            discountAmount: Number(order.discountAmount || 0) + pointsDiscount,
+            pointsUsed,
+            pointsDiscount,
             total: orderTotal,
             cashReceived,
             change,
@@ -180,15 +239,70 @@ export class BillingService {
     return this.invoiceRepository.findOneOrFail({ where: { id } });
   }
 
+  async createCreditNote(id: string, reason: string, userId?: string): Promise<Invoice> {
+    const trimmedReason = String(reason || '').trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('El motivo de la nota de credito es obligatorio');
+    }
+
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id, status: InvoiceStatus.ISSUED },
+      relations: ['order'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Factura no encontrada o no elegible para nota de credito');
+    }
+
+    await this.invoiceRepository.update(id, {
+      status: InvoiceStatus.CREDIT_NOTE,
+      cancellationReason: `NC: ${trimmedReason}`,
+      cancelledByUserId: userId,
+      cancelledAt: new Date(),
+      haciendaDocType: 'NC',
+      haciendaStatus: invoice.haciendaStatus === 'accepted' ? 'pending' : invoice.haciendaStatus,
+      haciendaMessage: invoice.haciendaStatus === 'accepted'
+        ? 'Nota de credito administrativa creada. Pendiente implementacion de envio fiscal NC.'
+        : (invoice.haciendaMessage ?? undefined),
+    });
+
+    await this.auditService.log({
+      branchId: invoice.order?.branchId,
+      userId,
+      action: 'invoice.credit_note',
+      entity: 'Invoice',
+      entityId: id,
+      newValue: { reason: trimmedReason },
+    });
+
+    return this.invoiceRepository.findOneOrFail({ where: { id } });
+  }
+
   findAll(branchId: string, from?: Date, to?: Date): Promise<Invoice[]> {
     const query = this.invoiceRepository
       .createQueryBuilder('inv')
-      .leftJoin('inv.order', 'order')
+      .leftJoinAndSelect('inv.order', 'order')
+      .leftJoinAndSelect('order.items', 'items')
+      .leftJoinAndSelect('order.table', 'table')
+      .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.branch', 'branch')
       .where('order.branchId = :branchId', { branchId })
       .orderBy('inv.createdAt', 'DESC');
 
-    if (from) query.andWhere('inv.createdAt >= :from', { from });
-    if (to) query.andWhere('inv.createdAt <= :to', { to });
+    if (from) {
+      // Start of day: 00:00:00
+      const fromDate = new Date(from);
+      fromDate.setHours(0, 0, 0, 0);
+      query.andWhere('inv.createdAt >= :from', { from: fromDate });
+    }
+    
+    if (to) {
+      // End of day: 23:59:59.999 (next day at 00:00:00)
+      const toDate = new Date(to);
+      toDate.setDate(toDate.getDate() + 1);
+      toDate.setHours(0, 0, 0, 0);
+      query.andWhere('inv.createdAt < :to', { to: toDate });
+    }
 
     return query.getMany();
   }

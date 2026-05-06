@@ -32,6 +32,13 @@ export class CustomersController {
     return this.customersService.findOne(id);
   }
 
+  @Get('code/:code')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Buscar cliente por código' })
+  findByCode(@Param('code') code: string) {
+    return this.customersService.findByCode(code);
+  }
+
   @Post()
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
   @ApiOperation({ summary: 'Crear cliente' })
@@ -44,6 +51,13 @@ export class CustomersController {
   @ApiOperation({ summary: 'Actualizar cliente' })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCustomerDto) {
     return this.customersService.update(id, dto);
+  }
+
+  @Post(':id/send-qr')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Enviar QR del cliente por email' })
+  sendQr(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customersService.sendQrByEmail(id);
   }
 
   @Get(':id/loyalty')

@@ -1,5 +1,7 @@
 import { useKioskStore } from '../store/kiosk.store';
 import type { Strings } from '../i18n/strings';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 export default function CartScreen({
   t,
@@ -9,6 +11,7 @@ export default function CartScreen({
   isPending: boolean;
 }) {
   const { cart, removeFromCart, goTo } = useKioskStore();
+  const settings = useSettings();
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   return (
@@ -36,8 +39,8 @@ export default function CartScreen({
               {item.notes && <p className="text-sm text-yellow-400 mt-0.5">📝 {item.notes}</p>}
             </div>
             <div className="text-right">
-              <p className="text-base text-gray-400">{item.quantity}× ${item.price}</p>
-              <p className="text-xl font-bold text-brand-400">${(item.price * item.quantity).toFixed(2)}</p>
+              <p className="text-base text-gray-400">{item.quantity}× {formatCurrency(item.price, settings)}</p>
+              <p className="text-xl font-bold text-brand-400">{formatCurrency(item.price * item.quantity, settings)}</p>
             </div>
             <button
               onClick={() => removeFromCart(item.productId)}
@@ -54,7 +57,7 @@ export default function CartScreen({
         <div className="px-6 py-5 bg-gray-800 border-t border-gray-700 space-y-4">
           <div className="flex justify-between text-2xl font-bold text-white">
             <span>{t.total}</span>
-            <span className="text-brand-400">${total.toFixed(2)}</span>
+            <span className="text-brand-400">{formatCurrency(total, settings)}</span>
           </div>
           <button
             onClick={() => goTo('PAYMENT')}

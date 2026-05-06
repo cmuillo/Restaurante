@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
-import { CreateInvoiceDto } from './dto/billing.dto';
+import { CreateInvoiceDto, CreateCreditNoteDto } from './dto/billing.dto';
 import { HaciendaService } from '../hacienda/hacienda.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -51,6 +51,17 @@ export class BillingController {
     @CurrentUser() user: any,
   ) {
     return this.billingService.cancelInvoice(id, dto.reason, user.id);
+  }
+
+  @Post('invoices/:id/credit-note')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
+  @ApiOperation({ summary: 'Emitir nota de credito administrativa' })
+  createCreditNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCreditNoteDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.billingService.createCreditNote(id, dto.reason, user.id);
   }
 
   @Post('invoices/:id/resend-hacienda')

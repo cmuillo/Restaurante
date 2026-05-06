@@ -2,13 +2,20 @@ import { create } from 'zustand';
 
 export type KioskScreen =
   | 'WELCOME'
-  | 'LANGUAGE'
+  | 'CUSTOMER'
   | 'ORDER_TYPE'
   | 'MENU'
   | 'PRODUCT_DETAIL'
   | 'CART'
   | 'PAYMENT'
   | 'CONFIRMATION';
+
+export interface KioskCustomer {
+  id: string;
+  code: string;
+  name: string;
+  loyaltyPoints: number;
+}
 
 export interface CartItem {
   productId: string;
@@ -21,16 +28,16 @@ export interface CartItem {
 
 interface KioskState {
   screen: KioskScreen;
-  language: 'es' | 'en';
   orderType: 'DINE_IN' | 'TO_GO' | null;
+  customer: KioskCustomer | null;
   cart: CartItem[];
   selectedProductId: string | null;
   confirmedOrderNumber: string | null;
   lastActivityAt: number;
 
   goTo: (screen: KioskScreen) => void;
-  setLanguage: (lang: 'es' | 'en') => void;
   setOrderType: (type: 'DINE_IN' | 'TO_GO') => void;
+  setCustomer: (customer: KioskCustomer | null) => void;
   selectProduct: (id: string) => void;
   addToCart: (item: CartItem) => void;
   removeFromCart: (productId: string) => void;
@@ -39,10 +46,10 @@ interface KioskState {
   touch: () => void;
 }
 
-const INITIAL: Pick<KioskState, 'screen' | 'language' | 'orderType' | 'cart' | 'selectedProductId' | 'confirmedOrderNumber' | 'lastActivityAt'> = {
+const INITIAL: Pick<KioskState, 'screen' | 'orderType' | 'customer' | 'cart' | 'selectedProductId' | 'confirmedOrderNumber' | 'lastActivityAt'> = {
   screen: 'WELCOME',
-  language: 'es',
   orderType: null,
+  customer: null,
   cart: [],
   selectedProductId: null,
   confirmedOrderNumber: null,
@@ -53,8 +60,8 @@ export const useKioskStore = create<KioskState>((set) => ({
   ...INITIAL,
 
   goTo: (screen) => set({ screen, lastActivityAt: Date.now() }),
-  setLanguage: (language) => set({ language, screen: 'ORDER_TYPE', lastActivityAt: Date.now() }),
   setOrderType: (orderType) => set({ orderType, screen: 'MENU', lastActivityAt: Date.now() }),
+  setCustomer: (customer) => set({ customer, screen: 'ORDER_TYPE', lastActivityAt: Date.now() }),
   selectProduct: (selectedProductId) => set({ selectedProductId, screen: 'PRODUCT_DETAIL', lastActivityAt: Date.now() }),
 
   addToCart: (item) =>

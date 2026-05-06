@@ -134,6 +134,7 @@ export class OrdersService {
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.modifiers', 'modifiers')
       .leftJoinAndSelect('order.table', 'table')
+      .leftJoinAndSelect('order.customer', 'customer')
       .where('order.branchId = :branchId', { branchId });
 
     if (filters?.status) {

@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import api from '../../../lib/api';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
+
+const CANCEL_REASONS = [
+  'Error en orden',
+  'Cliente se fue',
+  'Producto no disponible',
+  'Solicitud del cliente',
+  'Otro',
+];
 
 interface BillingModalProps {
   isOpen: boolean;
+  branchId: string;
   order: {
     id: string;
     orderNumber: number;
@@ -12,6 +23,12 @@ interface BillingModalProps {
     tipAmount: number;
     discountAmount: number;
     total: number;
+    customer?: {
+      id: string;
+      name: string;
+      code?: string;
+      loyaltyPoints?: number;
+    } | null;
     items: {
       id: string;
       productName: string;
@@ -19,7 +36,15 @@ interface BillingModalProps {
       subtotal?: number;
     }[];
   } | null;
+  customer?: {
+    id: string;
+    name: string;
+    code: string;
+    loyaltyPoints: number;
+  } | null;
+  initialStep?: 'payment' | 'cancelling';
   onClose: () => void;
+  onCancelled?: () => void;
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'qr' | 'mixed';
@@ -61,6 +86,11 @@ interface PrintableInvoiceData {
     type?: string;
     table?: string | null;
     notes?: string;
+    customer?: {
+      name?: string;
+      code?: string;
+      loyaltyPoints?: number;
+    } | null;
   };
   items?: PrintableInvoiceItem[];
   totals?: {
@@ -68,6 +98,8 @@ interface PrintableInvoiceData {
     taxAmount?: number;
     tipAmount?: number;
     discountAmount?: number;
+    pointsUsed?: number;
+    pointsDiscount?: number;
     total?: number;
     cashReceived?: number;
     change?: number;
@@ -110,19 +142,49 @@ function paymentMethodLabel(value?: string): string {
   return 'No indicado';
 }
 
-export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
+export function BillingModal({ isOpen, branchId, order, customer, initialStep = 'payment', onClose, onCancelled }: BillingModalProps) {
+  const settings = useSettings();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashReceived, setCashReceived] = useState<number>(0);
+  const [usePoints, setUsePoints] = useState<boolean>(false);
+  const [pointsToUse, setPointsToUse] = useState<number>(0);
   const [invoice, setInvoice] = useState<any>(null);
-  const [step, setStep] = useState<'payment' | 'invoice'>('payment');
+  const [step, setStep] = useState<'payment' | 'cancelling' | 'cancelled' | 'invoice'>(initialStep);
+  const [cancelReason, setCancelReason] = useState<string>(CANCEL_REASONS[0]);
+  const [cancelNotes, setCancelNotes] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen || !order) return;
     setPaymentMethod('cash');
     setCashReceived(toAmount(order.total));
     setInvoice(null);
-    setStep('payment');
-  }, [isOpen, order]);
+    setStep(initialStep);
+    setUsePoints(false);
+    setPointsToUse(0);
+    setCancelReason(CANCEL_REASONS[0]);
+    setCancelNotes('');
+  }, [isOpen, order]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mantiene el efectivo sugerido alineado al total final cuando cambia el descuento por puntos.
+  useEffect(() => {
+    if (!isOpen || !order || paymentMethod !== 'cash') return;
+    const effectiveTotal = Math.max(0, toAmount(order.total) - (usePoints ? pointsToUse : 0));
+    setCashReceived(effectiveTotal);
+  }, [isOpen, order, paymentMethod, usePoints, pointsToUse]);
+
+  const cancelOrder = useMutation({
+    mutationFn: () => {
+      const reason = cancelNotes.trim()
+        ? `${cancelReason}: ${cancelNotes.trim()}`
+        : cancelReason;
+      return api
+        .post(`/orders/${order?.id}/cancel?branchId=${branchId}`, { reason })
+        .then((r) => r.data);
+    },
+    onSuccess: () => {
+      setStep('cancelled');
+    },
+  });
 
   const createInvoice = useMutation({
     mutationFn: () =>
@@ -130,7 +192,9 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
         .post('/billing/invoices', {
           orderId: order?.id,
           paymentMethod,
-          cashReceived: paymentMethod === 'cash' ? cashReceived : toAmount(order?.total),
+          cashReceived: paymentMethod === 'cash' ? cashReceived : discountedTotal,
+          customerName: customer?.name || order?.customer?.name,
+          pointsUsed: usePoints ? pointsToUse : 0,
         })
         .then((r) => r.data),
     onSuccess: (data) => {
@@ -146,7 +210,8 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
   const tipAmount = toAmount(order.tipAmount);
   const discountAmount = toAmount(order.discountAmount);
   const total = toAmount(order.total);
-  const change = paymentMethod === 'cash' ? Math.max(0, cashReceived - total) : 0;
+  const discountedTotal = Math.max(0, total - (usePoints ? pointsToUse : 0));
+  const change = paymentMethod === 'cash' ? Math.max(0, cashReceived - discountedTotal) : 0;
 
   const printInvoiceReport = () => {
     const printable = (invoice?.printable || {}) as PrintableInvoiceData;
@@ -173,6 +238,8 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
       taxAmount: toAmount(printable.totals?.taxAmount ?? taxAmount),
       tipAmount: toAmount(printable.totals?.tipAmount ?? tipAmount),
       discountAmount: toAmount(printable.totals?.discountAmount ?? discountAmount),
+      pointsUsed: toAmount(printable.totals?.pointsUsed ?? (usePoints ? pointsToUse : 0)),
+      pointsDiscount: toAmount(printable.totals?.pointsDiscount ?? (usePoints ? pointsToUse : 0)),
       total: toAmount(printable.totals?.total ?? total),
       cashReceived: toAmount(printable.totals?.cashReceived ?? invoice?.cashReceived),
       change: toAmount(printable.totals?.change ?? invoice?.change),
@@ -262,7 +329,7 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
         <h4>Datos de orden</h4>
         <p><strong>Orden:</strong> #${escapeHtml(String(orderInfo.orderNumber || order.orderNumber))}</p>
         <p><strong>Origen:</strong> ${escapeHtml(sourceLabel)}</p>
-        <p><strong>Cliente:</strong> ${escapeHtml(invoice?.customerName || 'Consumidor final')}</p>
+        <p><strong>Cliente:</strong> ${escapeHtml(invoice?.customerName || orderInfo.customer?.name || customer?.name || order?.customer?.name || 'Consumidor final')}</p>
         <p><strong>Identificación:</strong> ${escapeHtml(invoice?.customerTaxId || 'No aplica')}</p>
         <p><strong>Dirección cliente:</strong> ${escapeHtml(invoice?.customerAddress || 'No aplica')}</p>
       </div>
@@ -291,6 +358,8 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
       <div class="totals-row"><span>Impuesto</span><strong>${formatMoney(totals.taxAmount)}</strong></div>
       <div class="totals-row"><span>Propina</span><strong>${formatMoney(totals.tipAmount)}</strong></div>
       <div class="totals-row"><span>Descuento</span><strong>- ${formatMoney(totals.discountAmount)}</strong></div>
+      <div class="totals-row"><span>Puntos usados</span><strong>${toAmount(totals.pointsUsed).toFixed(0)}</strong></div>
+      <div class="totals-row"><span>Monto cubierto con puntos</span><strong>- ${formatMoney(totals.pointsDiscount)}</strong></div>
       <div class="totals-row total"><span>Total</span><strong>${formatMoney(totals.total)}</strong></div>
       <div class="totals-row"><span>Efectivo recibido</span><strong>${formatMoney(totals.cashReceived)}</strong></div>
       <div class="totals-row"><span>Cambio</span><strong>${formatMoney(totals.change)}</strong></div>
@@ -321,7 +390,7 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 max-h-[92vh] overflow-hidden flex flex-col">
         {step === 'payment' ? (
           <>
             {/* Header */}
@@ -331,34 +400,40 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
             </div>
 
             {/* Contenido */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto">
               {/* Resumen de orden */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">${subtotal.toFixed(2)}</span>
+                  <span className="font-medium">{formatCurrency(subtotal, settings)}</span>
                 </div>
                 {taxAmount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Impuestos</span>
-                    <span className="font-medium">${taxAmount.toFixed(2)}</span>
+                    <span className="font-medium">{formatCurrency(taxAmount, settings)}</span>
                   </div>
                 )}
                 {tipAmount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Propina</span>
-                    <span className="font-medium">${tipAmount.toFixed(2)}</span>
+                    <span className="font-medium">{formatCurrency(tipAmount, settings)}</span>
                   </div>
                 )}
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Descuento</span>
-                    <span className="font-medium">-${discountAmount.toFixed(2)}</span>
+                    <span className="font-medium">-{formatCurrency(discountAmount, settings)}</span>
+                  </div>
+                )}
+                {usePoints && pointsToUse > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-600">Descuento por puntos</span>
+                    <span className="font-medium text-blue-600">-{formatCurrency(pointsToUse, settings)}</span>
                   </div>
                 )}
                 <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-lg">
                   <span>Total</span>
-                  <span className="text-brand-600">${total.toFixed(2)}</span>
+                  <span className="text-brand-600">{formatCurrency(discountedTotal, settings)}</span>
                 </div>
               </div>
 
@@ -368,11 +443,65 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
                   {order.items?.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm">
                       <span className="text-gray-700">{item.quantity}x {item.productName}</span>
-                      <span className="text-gray-600">${toAmount(item.subtotal).toFixed(2)}</span>
+                      <span className="text-gray-600">{formatCurrency(toAmount(item.subtotal), settings)}</span>
                     </div>
                   ))}
                 </div>
               </div>
+
+              {(customer || order.customer) && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 space-y-1">
+                  <p className="text-sm font-semibold text-indigo-900">Cliente</p>
+                  <p className="text-sm text-indigo-800">{customer?.name || order.customer?.name}</p>
+                  <p className="text-xs text-indigo-700">Código: {customer?.code || order.customer?.code || 'N/A'}</p>
+                  <p className="text-xs text-indigo-700">Puntos actuales: {customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0}</p>
+                </div>
+              )}
+
+              {/* Puntos del cliente */}
+              {(customer || order.customer) && ((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0) > 0) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-blue-900">Puntos disponibles</p>
+                    <p className="text-lg font-bold text-blue-700">{customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="usePointsCheckbox"
+                      checked={usePoints}
+                      onChange={(e) => {
+                        setUsePoints(e.target.checked);
+                        if (e.target.checked) {
+                          setPointsToUse(Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1)));
+                        } else {
+                          setPointsToUse(0);
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="usePointsCheckbox" className="text-sm font-medium text-blue-900 cursor-pointer">
+                      Usar puntos como descuento
+                    </label>
+                  </div>
+                  {usePoints && (
+                    <div className="space-y-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max={Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1))}
+                        value={pointsToUse}
+                        onChange={(e) => setPointsToUse(Math.min(Number(e.target.value), (customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0)))}
+                        className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Cantidad de puntos"
+                      />
+                      <p className="text-xs text-blue-600">
+                        Descuento: {formatCurrency(pointsToUse, settings)} | Puntos max: {Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1))}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Método de pago */}
               <div className="space-y-2">
@@ -408,7 +537,7 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
                   {change > 0 && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex justify-between">
                       <span className="text-green-700 text-sm font-medium">Cambio:</span>
-                      <span className="text-green-700 text-sm font-bold">${change.toFixed(2)}</span>
+                      <span className="text-green-700 text-sm font-bold">{formatCurrency(change, settings)}</span>
                     </div>
                   )}
                 </div>
@@ -419,16 +548,23 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
                 <button
                   onClick={onClose}
                   disabled={createInvoice.isPending}
-                  className="flex-1 py-2 px-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
+                  className="py-2 px-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
                 >
-                  Cancelar
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => setStep('cancelling')}
+                  disabled={createInvoice.isPending}
+                  className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                >
+                  🚫 Cancelar Orden
                 </button>
                 <button
                   onClick={() => createInvoice.mutate()}
-                  disabled={createInvoice.isPending || (paymentMethod === 'cash' && cashReceived < total)}
+                  disabled={createInvoice.isPending || (paymentMethod === 'cash' && cashReceived < discountedTotal)}
                   className="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
-                  {createInvoice.isPending ? 'Procesando…' : 'Generar Factura'}
+                  {createInvoice.isPending ? 'Procesando…' : 'Facturar'}
                 </button>
               </div>
 
@@ -437,6 +573,90 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
                   Error: {(createInvoice.error as any)?.response?.data?.message || 'No se pudo generar la factura'}
                 </p>
               )}
+            </div>
+          </>
+        ) : step === 'cancelling' ? (
+          <>
+            {/* Cancel Step */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 rounded-t-xl">
+              <h2 className="text-xl font-bold text-white">🚫 Cancelar Orden</h2>
+              <p className="text-red-100 text-sm">Orden #{order.orderNumber} · {order.items?.length} ítem(s) · {formatCurrency(total, settings)}</p>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm font-medium">Esta acción es irreversible. La orden quedará marcada como CANCELADA y será removida del módulo de cocina.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Motivo de cancelación</label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  {CANCEL_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Notas adicionales <span className="font-normal text-gray-400">(opcional)</span></label>
+                <textarea
+                  value={cancelNotes}
+                  onChange={(e) => setCancelNotes(e.target.value)}
+                  rows={3}
+                  maxLength={250}
+                  placeholder="Detalles adicionales sobre la cancelación..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                />
+              </div>
+
+              {cancelOrder.isError && (
+                <p className="text-red-600 text-sm text-center">
+                  {(cancelOrder.error as any)?.response?.data?.message || 'No se pudo cancelar la orden'}
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setStep('payment')}
+                  disabled={cancelOrder.isPending}
+                  className="flex-1 py-2 px-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
+                >
+                  Volver
+                </button>
+                <button
+                  onClick={() => cancelOrder.mutate()}
+                  disabled={cancelOrder.isPending}
+                  className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                >
+                  {cancelOrder.isPending ? 'Cancelando…' : 'Confirmar Cancelación'}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : step === 'cancelled' ? (
+          <>
+            {/* Cancelled Step */}
+            <div className="bg-gradient-to-r from-gray-600 to-gray-700 px-6 py-4 rounded-t-xl">
+              <h2 className="text-xl font-bold text-white">✅ Orden Cancelada</h2>
+              <p className="text-gray-200 text-sm">Orden #{order.orderNumber}</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+                <p className="text-gray-700"><strong>Motivo:</strong> {cancelReason}{cancelNotes ? `: ${cancelNotes}` : ''}</p>
+                <p className="text-gray-500 text-xs">La orden fue removida del módulo de cocina y registrada como cancelada.</p>
+              </div>
+
+              <button
+                onClick={() => { onCancelled ? onCancelled() : onClose(); }}
+                className="w-full py-2 px-3 bg-gray-700 hover:bg-gray-800 text-white font-semibold rounded-lg text-sm transition-colors"
+              >
+                Cerrar
+              </button>
             </div>
           </>
         ) : (
@@ -463,13 +683,13 @@ export function BillingModal({ isOpen, order, onClose }: BillingModalProps) {
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total</span>
-                    <span className="font-bold text-brand-600">${toAmount(invoice?.total).toFixed(2)}</span>
+                    <span className="font-bold text-brand-600">{formatCurrency(toAmount(invoice?.total), settings)}</span>
                   </div>
                 </div>
                 {invoice?.change > 0 && (
                   <div className="bg-green-50 border border-green-200 rounded px-3 py-2 flex justify-between">
                     <span className="text-green-700 text-sm">Cambio:</span>
-                    <span className="text-green-700 font-bold">${toAmount(invoice.change).toFixed(2)}</span>
+                    <span className="text-green-700 font-bold">{formatCurrency(toAmount(invoice.change), settings)}</span>
                   </div>
                 )}
               </div>

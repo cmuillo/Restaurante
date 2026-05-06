@@ -1,5 +1,5 @@
 import api from '../../../lib/api';
-import { useAuthStore } from '../../../stores/auth.store';
+import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { parseApiFormErrors } from '../../../lib/formErrors';
@@ -25,8 +25,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export default function UsersPage() {
-  const { user } = useAuthStore();
-  const branchId = user?.branchId;
+  const branchId = useActiveBranchId();
   const qc = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
