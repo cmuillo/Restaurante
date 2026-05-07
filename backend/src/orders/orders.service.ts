@@ -135,6 +135,7 @@ export class OrdersService {
       .leftJoinAndSelect('items.modifiers', 'modifiers')
       .leftJoinAndSelect('order.table', 'table')
       .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.invoice', 'invoice')
       .where('order.branchId = :branchId', { branchId });
 
     if (filters?.status) {
@@ -150,7 +151,7 @@ export class OrdersService {
   async findOne(id: string, branchId: string): Promise<Order> {
     const order = await this.orderRepository.findOne({
       where: { id, branchId },
-      relations: ['items', 'items.modifiers', 'table', 'user', 'customer'],
+      relations: ['items', 'items.modifiers', 'table', 'user', 'customer', 'invoice'],
     });
     if (!order) throw new NotFoundException('Orden no encontrada');
     return order;

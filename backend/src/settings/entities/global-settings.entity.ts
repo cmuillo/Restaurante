@@ -47,6 +47,10 @@ export class GlobalSettings {
   @Column({ length: 10, default: 'light' })
   theme: string;
 
+  /** Color de acento principal de la marca (hex, ej: #ea580c) */
+  @Column({ length: 20, default: '#ea580c' })
+  brandColor: string;
+
   // ─── Fiscal / Impuestos ───────────────────────────────────────────────────
   /** Tasa de impuesto por defecto (%) — Costa Rica: 13 */
   @Column('decimal', { precision: 5, scale: 2, default: 13 })

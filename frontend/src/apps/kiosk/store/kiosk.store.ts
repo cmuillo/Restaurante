@@ -20,7 +20,8 @@ export interface KioskCustomer {
 export interface CartItem {
   productId: string;
   productName: string;
-  price: number;
+  price: number;      // precio BASE sin IVA (lo que se envía al backend)
+  taxRate: number;   // % de IVA del producto
   quantity: number;
   notes?: string;
   modifiers: { modifierOptionId: string; optionName: string; extraPrice: number }[];

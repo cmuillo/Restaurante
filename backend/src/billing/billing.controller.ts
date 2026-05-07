@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
-import { CreateInvoiceDto, CreateCreditNoteDto } from './dto/billing.dto';
+import { CreateInvoiceDto, CreateCreditNoteDto, SendInvoiceEmailDto } from './dto/billing.dto';
 import { HaciendaService } from '../hacienda/hacienda.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -67,7 +67,20 @@ export class BillingController {
   @Post('invoices/:id/resend-hacienda')
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Reenviar comprobante a Hacienda (para facturas con error o rechazadas)' })
-  resendToHacienda(@Param('id', ParseUUIDPipe) id: string) {
-    return this.haciendaService.resend(id);
+  resendToHacienda(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+  ) {
+    return this.haciendaService.resend(id, branchId);
+  }
+
+  @Post('invoices/:id/send-email')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Enviar factura por correo electrónico' })
+  sendInvoiceByEmail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SendInvoiceEmailDto,
+  ) {
+    return this.billingService.sendInvoiceByEmail(id, dto.email);
   }
 }

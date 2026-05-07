@@ -5,7 +5,6 @@ import {
   IsNumber,
   IsUUID,
   IsArray,
-  IsUrl,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -41,7 +40,7 @@ export class CreateProductDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   imageUrl?: string;
 
   @ApiProperty({ required: false })

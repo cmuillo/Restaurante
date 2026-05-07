@@ -14,7 +14,7 @@ const navItems = [
   { to: '/tables', label: 'Mesas', icon: '🪑' },
   { to: '/orders', label: 'Órdenes', icon: '📋' },
   { to: '/invoices', label: 'Facturas', icon: '🧾' },
-  { to: '/inventory', label: 'Inventario', icon: '📦' },
+  { to: '/expenses', label: 'Gastos', icon: '💸' },
   { to: '/customers', label: 'Clientes', icon: '👥' },
   { to: '/reports', label: 'Reportes', icon: '📈' },
   { to: '/users', label: 'Usuarios', icon: '👤' },
@@ -37,9 +37,10 @@ export default function AdminLayout() {
     enabled: isSuperAdmin,
   });
 
-  // Auto-select the first branch when list loads and nothing is selected yet
+  // Auto-select a valid branch when list loads.
   useEffect(() => {
-    if (isSuperAdmin && branches.length > 0 && !activeBranchId) {
+    const hasValidActiveBranch = branches.some((b) => b.id === activeBranchId);
+    if (isSuperAdmin && branches.length > 0 && !hasValidActiveBranch) {
       setActiveBranchId(branches[0].id);
     }
   }, [isSuperAdmin, branches, activeBranchId, setActiveBranchId]);

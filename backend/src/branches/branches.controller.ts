@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Body, Param, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Param, UseGuards, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -26,8 +26,8 @@ export class BranchesController {
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Listar todas las sucursales' })
-  findAll() {
-    return this.branchesService.findAll();
+  findAll(@Query('includeInactive') includeInactive?: string) {
+    return this.branchesService.findAll(includeInactive === 'true');
   }
 
   @Get(':id')

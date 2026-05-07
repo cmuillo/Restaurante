@@ -18,7 +18,7 @@ export default function PaymentScreen({
 }) {
   const { goTo, cart } = useKioskStore();
   const settings = useSettings();
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const total = cart.reduce((s, i) => s + i.price * (1 + i.taxRate / 100) * i.quantity, 0);
 
   const cardDisabled = true;
   const cashLabel = orderType === 'TO_GO' ? 'Pagar en caja' : t.payWithCash;

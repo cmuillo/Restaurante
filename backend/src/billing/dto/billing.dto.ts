@@ -1,4 +1,4 @@
-import { IsEnum, IsObject, IsOptional, IsString, IsNumber, IsUUID, Min, MaxLength } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, IsNumber, IsUUID, Min, MaxLength, IsEmail } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMethod } from '../entities/invoice.entity';
 
@@ -52,4 +52,11 @@ export class CreateCreditNoteDto {
   @IsString()
   @MaxLength(300)
   reason: string;
+}
+
+export class SendInvoiceEmailDto {
+  @ApiProperty({ description: 'Correo destino para enviar la factura' })
+  @IsEmail()
+  @MaxLength(150)
+  email: string;
 }

@@ -46,6 +46,20 @@ export class ReportsController {
     return this.reportsService.topProducts(branchId, new Date(from), new Date(to));
   }
 
+  @Get('top-customers')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Clientes con más compras' })
+  topCustomers(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = Number(limit);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 10;
+    return this.reportsService.topCustomers(branchId, new Date(from), new Date(to), safeLimit);
+  }
+
   @Get('peak-hours')
   @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
   @ApiOperation({ summary: 'Horas pico de ventas' })
@@ -66,5 +80,16 @@ export class ReportsController {
     @Query('to') to: string,
   ) {
     return this.reportsService.profitLoss(branchId, new Date(from), new Date(to));
+  }
+
+  @Get('sales-by-category')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Ventas por categoría de producto' })
+  salesByCategory(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.reportsService.salesByCategory(branchId, new Date(from), new Date(to));
   }
 }

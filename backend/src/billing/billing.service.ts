@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import PDFDocument = require('pdfkit');
+import * as nodemailer from 'nodemailer';
 import { Invoice, InvoiceStatus, PaymentMethod } from './entities/invoice.entity';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
@@ -68,14 +70,49 @@ export class BillingService {
           });
         }
       }
-      const cashReceived = Number(dto.cashReceived || orderTotal);
-      const change = Math.max(0, cashReceived - orderTotal);
+      const normalizedPaymentDetails: Record<string, number> = {};
+      let expectedCashPortion = 0;
+      let cashReceived = 0;
+      let change = 0;
+
+      if (dto.paymentMethod === PaymentMethod.MIXED) {
+        const mixedCash = Number(dto.paymentDetails?.cash ?? 0);
+        const mixedCard = Number(dto.paymentDetails?.card ?? 0);
+
+        if (mixedCash <= 0 || mixedCard <= 0) {
+          throw new BadRequestException('Para pago mixto debes indicar montos de efectivo y tarjeta mayores a cero');
+        }
+
+        const mixedTotal = mixedCash + mixedCard;
+        if (Math.abs(mixedTotal - orderTotal) > 0.01) {
+          throw new BadRequestException('La suma de efectivo y tarjeta debe ser igual al total a cobrar');
+        }
+
+        expectedCashPortion = mixedCash;
+        normalizedPaymentDetails.cash = mixedCash;
+        normalizedPaymentDetails.card = mixedCard;
+
+        cashReceived = Number(dto.cashReceived ?? mixedCash);
+        if (cashReceived < expectedCashPortion) {
+          throw new BadRequestException('El efectivo recibido no cubre la porción en efectivo del pago mixto');
+        }
+        change = Math.max(0, cashReceived - expectedCashPortion);
+      } else if (dto.paymentMethod === PaymentMethod.CASH) {
+        expectedCashPortion = orderTotal;
+        cashReceived = Number(dto.cashReceived ?? orderTotal);
+        if (cashReceived < expectedCashPortion) {
+          throw new BadRequestException('El efectivo recibido no cubre el total de la orden');
+        }
+        change = Math.max(0, cashReceived - expectedCashPortion);
+      } else {
+        normalizedPaymentDetails[dto.paymentMethod] = orderTotal;
+      }
 
       const invoice = manager.create(Invoice, {
         orderId: dto.orderId,
         invoiceNumber,
         paymentMethod: dto.paymentMethod,
-        paymentDetails: dto.paymentDetails,
+        paymentDetails: Object.keys(normalizedPaymentDetails).length > 0 ? normalizedPaymentDetails : undefined,
         customerName: dto.customerName || order.customer?.name || 'Consumidor final',
         customerTaxId: dto.customerTaxId || order.customer?.taxId || undefined,
         customerAddress: dto.customerAddress || order.customer?.address || undefined,
@@ -305,5 +342,106 @@ export class BillingService {
     }
 
     return query.getMany();
+  }
+
+  async sendInvoiceByEmail(invoiceId: string, toEmail: string): Promise<{ success: boolean; message: string }> {
+    const cleanEmail = String(toEmail || '').trim();
+    if (!cleanEmail) {
+      throw new BadRequestException('Debes indicar un correo destino');
+    }
+    if (!process.env.SMTP_HOST) {
+      throw new BadRequestException('SMTP no configurado. Define SMTP_HOST para habilitar envio de facturas');
+    }
+
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['order', 'order.items', 'order.branch', 'order.customer', 'order.table'],
+    });
+    if (!invoice) {
+      throw new NotFoundException('Factura no encontrada');
+    }
+
+    const pdfBuffer = await this.generateInvoicePdf(invoice);
+    const smtpPass = String(process.env.SMTP_PASS ?? '').replace(/\s+/g, '');
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: smtpPass },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+      to: cleanEmail,
+      subject: `Factura ${invoice.invoiceNumber}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+          <h2 style="margin:0 0 8px;color:#111827">Factura ${invoice.invoiceNumber}</h2>
+          <p style="margin:0 0 8px;color:#374151">Adjuntamos su factura en formato carta (PDF).</p>
+          <p style="margin:0;color:#6b7280">Total: <strong>${Number(invoice.total || 0).toFixed(2)}</strong></p>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `factura-${invoice.invoiceNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    return { success: true, message: 'Factura enviada por correo correctamente' };
+  }
+
+  private generateInvoicePdf(invoice: Invoice): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'LETTER', margin: 40 });
+      const chunks: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const order = invoice.order;
+      const branch = order?.branch;
+      const customer = order?.customer;
+      const created = new Date(invoice.createdAt).toLocaleString('es-CR');
+
+      doc.fontSize(18).text(branch?.name || 'Factura', { align: 'left' });
+      doc.moveDown(0.25);
+      doc.fontSize(10).text(`Factura: ${invoice.invoiceNumber}`);
+      doc.text(`Fecha: ${created}`);
+      doc.text(`Metodo de pago: ${invoice.paymentMethod}`);
+      doc.text(`Cliente: ${invoice.customerName || customer?.name || 'Consumidor final'}`);
+      doc.moveDown(0.5);
+      doc.text(`Sucursal: ${branch?.address || 'Direccion no registrada'}`);
+      if (branch?.phone) doc.text(`Telefono: ${branch.phone}`);
+      if (branch?.email) doc.text(`Email: ${branch.email}`);
+
+      doc.moveDown(1);
+      doc.fontSize(11).text('Detalle');
+      doc.moveDown(0.25);
+
+      const items = order?.items || [];
+      items.forEach((item) => {
+        const qty = Number(item.quantity || 0);
+        const sub = Number(item.subtotal || 0);
+        doc.fontSize(10).text(`${qty} x ${item.productName}`, { continued: true }).text(`  ${sub.toFixed(2)}`, { align: 'right' });
+      });
+
+      doc.moveDown(1);
+      doc.fontSize(10).text(`Subtotal: ${Number(invoice.subtotal || 0).toFixed(2)}`, { align: 'right' });
+      doc.text(`Impuestos: ${Number(invoice.taxAmount || 0).toFixed(2)}`, { align: 'right' });
+      doc.text(`Propina: ${Number(invoice.tipAmount || 0).toFixed(2)}`, { align: 'right' });
+      doc.text(`Descuento: ${Number(invoice.discountAmount || 0).toFixed(2)}`, { align: 'right' });
+      doc.fontSize(12).text(`TOTAL: ${Number(invoice.total || 0).toFixed(2)}`, { align: 'right' });
+
+      if (Number(invoice.cashReceived || 0) > 0) {
+        doc.moveDown(0.25);
+        doc.fontSize(10).text(`Efectivo recibido: ${Number(invoice.cashReceived || 0).toFixed(2)}`, { align: 'right' });
+        doc.text(`Cambio: ${Number(invoice.change || 0).toFixed(2)}`, { align: 'right' });
+      }
+
+      doc.end();
+    });
   }
 }

@@ -261,6 +261,36 @@ export default function SettingsPage() {
               <p className="text-xs text-amber-600 mt-2">⚠️ Algunos componentes de páginas específicas pueden requerir recarga para aplicar el tema.</p>
             </Field>
 
+            <SectionTitle>Color de marca</SectionTitle>
+
+            <Field label="Color principal (brand)" hint="Aplica a botones, enlaces y acentos en el POS y panel admin.">
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={current.brandColor ?? '#ea580c'}
+                  onChange={(e) => {
+                    update('brandColor', e.target.value);
+                    document.documentElement.style.setProperty('--brand-600', e.target.value);
+                  }}
+                  className="w-12 h-10 rounded border border-gray-300 cursor-pointer p-0.5"
+                />
+                <input
+                  className={INPUT}
+                  value={current.brandColor ?? '#ea580c'}
+                  onChange={(e) => {
+                    update('brandColor', e.target.value);
+                    document.documentElement.style.setProperty('--brand-600', e.target.value);
+                  }}
+                  placeholder="#ea580c"
+                />
+                <div
+                  className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0"
+                  style={{ backgroundColor: current.brandColor ?? '#ea580c' }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Guarda los cambios para que se apliquen al recargar otras sesiones.</p>
+            </Field>
+
             <SectionTitle>Factura impresa</SectionTitle>
 
             <Field label="Mensaje de pie de factura" hint="Aparece al final de cada factura impresa.">

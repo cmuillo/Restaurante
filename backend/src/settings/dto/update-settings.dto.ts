@@ -48,6 +48,9 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() @IsIn(THEMES)
   theme?: string;
 
+  @IsOptional() @IsString() @MaxLength(20)
+  brandColor?: string;
+
   @IsOptional() @IsNumber() @Min(0) @Max(100) @Type(() => Number)
   defaultTaxRate?: number;
 

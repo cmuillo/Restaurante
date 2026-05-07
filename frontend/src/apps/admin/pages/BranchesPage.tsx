@@ -29,7 +29,7 @@ export default function BranchesPage() {
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ['branches'],
-    queryFn: () => api.get('/branches').then((r) => r.data),
+    queryFn: () => api.get('/branches?includeInactive=true').then((r) => r.data),
   });
 
   const saveBranch = useMutation({

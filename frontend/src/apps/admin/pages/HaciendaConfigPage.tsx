@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../lib/api';
 
@@ -107,9 +107,15 @@ export default function HaciendaConfigPage() {
 
   const resendMut = useMutation({
     mutationFn: (invoiceId: string) =>
-      api.post(`/hacienda/invoices/${invoiceId}/resend`).then((r) => r.data),
+      api.post(`/hacienda/invoices/${invoiceId}/resend`, null, { params: { branchId: selectedBranch } }).then((r) => r.data),
     onSuccess: () => setTimeout(() => refetchStatuses(), 3000),
   });
+
+  useEffect(() => {
+    if (!selectedBranch && branches.length > 0) {
+      setSelectedBranch(branches[0].id);
+    }
+  }, [selectedBranch, branches]);
 
   // ─── Formulario de emisor ─────────────────────────────────────────────────
   function EmisorTab() {

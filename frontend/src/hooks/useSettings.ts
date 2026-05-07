@@ -18,7 +18,11 @@ export function useSettingsLoader() {
   });
 
   useEffect(() => {
-    if (data) setSettings(data);
+    if (data) {
+      setSettings(data);
+      // Aplicar el color de marca como CSS var para que Tailwind lo use dinámicamente
+      document.documentElement.style.setProperty('--brand-600', data.brandColor ?? '#ea580c');
+    }
   }, [data, setSettings]);
 }
 

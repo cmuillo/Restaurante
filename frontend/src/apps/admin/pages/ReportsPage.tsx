@@ -6,17 +6,24 @@ import { useSettings } from '../../../hooks/useSettings';
 import { formatCurrency } from '../../../stores/settings.store';
 
 type DateRange = 'week' | 'month' | 'custom';
+type InvoiceFilter = 'all' | 'points';
 
 type InvoiceItem = {
   id: string;
   invoiceNumber: string;
   paymentMethod?: string;
+  paymentDetails?: Record<string, number>;
   status?: string;
   customerName?: string;
   subtotal: number;
   taxAmount: number;
   total: number;
   createdAt: string;
+  order?: {
+    pointsUsed?: number;
+    pointsDiscount?: number;
+    customer?: { name?: string; code?: string } | null;
+  };
 };
 
 type ExpenseItem = {
@@ -25,6 +32,24 @@ type ExpenseItem = {
   category: string;
   description: string;
   amount: number;
+};
+
+type TopCustomerItem = {
+  customerId: string;
+  customerName: string;
+  customerCode?: string;
+  purchaseCount: number;
+  totalSpent: number;
+  lastPurchaseAt: string;
+};
+
+type CategorySalesItem = {
+  categoryId: string;
+  categoryName: string;
+  orderCount: number;
+  totalQuantity: number;
+  totalRevenue: number;
+  percentage: number;
 };
 
 function toDateInputValue(d: Date): string {
@@ -72,6 +97,7 @@ export default function ReportsPage() {
   const settings = useSettings();
 
   const [dateRange, setDateRange] = useState<DateRange>('month');
+  const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilter>('all');
   const today = toDateInputValue(new Date());
   const thirtyDaysAgo = toDateInputValue(new Date(Date.now() - 30 * 86400_000));
 
@@ -105,15 +131,48 @@ export default function ReportsPage() {
     enabled: !!branchId,
   });
 
+  const { data: topCustomers = [] } = useQuery<TopCustomerItem[]>({
+    queryKey: ['reports-top-customers', branchId, from, to],
+    queryFn: () =>
+      api.get(`/reports/top-customers?branchId=${branchId}&from=${from}&to=${to}&limit=50`).then((r) => r.data),
+    enabled: !!branchId,
+  });
+
+  const { data: categorySales = [] } = useQuery<CategorySalesItem[]>({
+    queryKey: ['reports-sales-by-category', branchId, from, to],
+    queryFn: () =>
+      api.get(`/reports/sales-by-category?branchId=${branchId}&from=${from}&to=${to}`).then((r) => r.data),
+    enabled: !!branchId,
+  });
+
   const paymentSummary = useMemo(() => {
     const map = new Map<string, { invoices: number; total: number }>();
-    for (const inv of invoices) {
-      const key = inv.paymentMethod || 'unknown';
+
+    const addToMethod = (method: string, amount: number) => {
+      const key = method || 'unknown';
       const current = map.get(key) ?? { invoices: 0, total: 0 };
-      current.invoices += 1;
-      current.total += Number(inv.total || 0);
+      if (amount > 0) {
+        current.invoices += 1;
+        current.total += amount;
+      }
       map.set(key, current);
+    };
+
+    for (const inv of invoices) {
+      const method = inv.paymentMethod || 'unknown';
+
+      if (method === 'mixed') {
+        const mixedCash = Number(inv.paymentDetails?.cash ?? 0);
+        const mixedCard = Number(inv.paymentDetails?.card ?? 0);
+
+        if (mixedCash > 0) addToMethod('cash', mixedCash);
+        if (mixedCard > 0) addToMethod('card', mixedCard);
+        continue;
+      }
+
+      addToMethod(method, Number(inv.total || 0));
     }
+
     return Array.from(map.entries())
       .map(([method, values]) => ({ method, ...values }))
       .sort((a, b) => b.total - a.total);
@@ -122,6 +181,23 @@ export default function ReportsPage() {
   const totalExpenses = useMemo(
     () => expenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0),
     [expenses],
+  );
+
+  const pointsDiscountRows = useMemo(
+    () => invoices.filter((inv) => Number(inv.order?.pointsDiscount || 0) > 0),
+    [invoices],
+  );
+
+  const filteredInvoices = useMemo(
+    () => (invoiceFilter === 'points'
+      ? invoices.filter((inv) => Number(inv.order?.pointsDiscount || 0) > 0)
+      : invoices),
+    [invoices, invoiceFilter],
+  );
+
+  const totalPointsDiscount = useMemo(
+    () => pointsDiscountRows.reduce((sum, inv) => sum + Number(inv.order?.pointsDiscount || 0), 0),
+    [pointsDiscountRows],
   );
 
   const net = Number(salesRange?.total || 0) - totalExpenses;
@@ -178,24 +254,41 @@ export default function ReportsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-sm text-gray-600">Ventas facturadas</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(salesRange?.total || 0, settings)}</p>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-amber-500/15 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-amber-500/20 rounded-lg p-2 text-2xl flex-shrink-0">💰</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-amber-300 truncate">Ventas facturadas</p>
+            <p className="text-xl font-bold text-amber-100 mt-0.5 truncate">{formatCurrency(salesRange?.total || 0, settings)}</p>
+          </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-sm text-gray-600">Impuestos</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(salesRange?.tax || 0, settings)}</p>
+        <div className="bg-slate-500/15 border border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📑</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-300 truncate">Impuestos</p>
+            <p className="text-xl font-bold text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.tax || 0, settings)}</p>
+          </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-sm text-gray-600">Gastos</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalExpenses, settings)}</p>
+        <div className="bg-red-500/15 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-red-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-red-300 truncate">Gastos</p>
+            <p className="text-xl font-bold text-red-100 mt-0.5 truncate">{formatCurrency(totalExpenses, settings)}</p>
+          </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <p className="text-sm text-gray-600">Resultado neto</p>
-          <p className={`text-2xl font-bold mt-1 ${net >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-            {formatCurrency(net, settings)}
-          </p>
+        <div className={`rounded-xl p-4 flex items-center gap-3 ${net >= 0 ? 'bg-green-500/15 border border-green-500/30' : 'bg-red-500/15 border border-red-500/30'}`}>
+          <div className={`rounded-lg p-2 text-2xl flex-shrink-0 ${net >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>📊</div>
+          <div className="min-w-0">
+            <p className={`text-xs font-medium truncate ${net >= 0 ? 'text-green-300' : 'text-red-300'}`}>Resultado neto</p>
+            <p className={`text-xl font-bold mt-0.5 truncate ${net >= 0 ? 'text-green-100' : 'text-red-100'}`}>{formatCurrency(net, settings)}</p>
+          </div>
+        </div>
+        <div className="bg-blue-500/15 border border-blue-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-blue-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🎯</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-blue-300 truncate">Desc. por puntos</p>
+            <p className="text-xl font-bold text-blue-100 mt-0.5 truncate">{formatCurrency(totalPointsDiscount, settings)}</p>
+          </div>
         </div>
       </div>
 
@@ -297,17 +390,144 @@ export default function ReportsPage() {
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
-          <h2 className="font-semibold text-gray-900">Facturas emitidas</h2>
+          <h2 className="font-semibold text-gray-900">Clientes con más compras</h2>
           <button
             onClick={() => downloadCsv(
-              `reporte_facturas_${fileSuffix}.csv`,
-              ['Fecha', 'Factura', 'Cliente', 'Método', 'Estado', 'Subtotal', 'Impuestos', 'Total'],
-              invoices.map((inv) => [
+              `reporte_clientes_top_${fileSuffix}.csv`,
+              ['Cliente', 'Código', 'Compras', 'Total comprado', 'Última compra'],
+              topCustomers.map((c) => [
+                c.customerName,
+                c.customerCode || '-',
+                c.purchaseCount,
+                Number(c.totalSpent || 0).toFixed(2),
+                c.lastPurchaseAt ? new Date(c.lastPurchaseAt).toLocaleString('es-CR') : '-',
+              ]),
+            )}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            Exportar CSV
+          </button>
+        </div>
+        <div className="overflow-auto max-h-80">
+          <table className="w-full min-w-[860px] text-sm">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Cliente</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Código</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Compras</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Total comprado</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Última compra</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {topCustomers.map((c) => (
+                <tr key={c.customerId}>
+                  <td className="px-4 py-2">{c.customerName}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{c.customerCode || '-'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{c.purchaseCount}</td>
+                  <td className="px-4 py-2 font-semibold whitespace-nowrap">{formatCurrency(c.totalSpent, settings)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{c.lastPurchaseAt ? new Date(c.lastPurchaseAt).toLocaleString('es-CR') : '-'}</td>
+                </tr>
+              ))}
+              {topCustomers.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Sin clientes con compras en el rango seleccionado.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-gray-900">Descuentos por puntos aplicados</h2>
+          <button
+            onClick={() => downloadCsv(
+              `reporte_descuento_puntos_${fileSuffix}.csv`,
+              ['Fecha', 'Factura', 'Cliente', 'Codigo cliente', 'Puntos usados', 'Descuento aplicado'],
+              pointsDiscountRows.map((inv) => [
+                new Date(inv.createdAt).toLocaleString('es-CR'),
+                inv.invoiceNumber,
+                inv.customerName || inv.order?.customer?.name || 'Consumidor final',
+                inv.order?.customer?.code || '-',
+                Number(inv.order?.pointsUsed || 0),
+                Number(inv.order?.pointsDiscount || 0).toFixed(2),
+              ]),
+            )}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            Exportar CSV
+          </button>
+        </div>
+        <div className="overflow-auto max-h-80">
+          <table className="w-full min-w-[960px] text-sm">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Fecha</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Factura</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Cliente</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Código</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Puntos usados</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Descuento</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pointsDiscountRows.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="px-4 py-2 whitespace-nowrap">{new Date(inv.createdAt).toLocaleString('es-CR')}</td>
+                  <td className="px-4 py-2 font-mono whitespace-nowrap">{inv.invoiceNumber}</td>
+                  <td className="px-4 py-2">{inv.customerName || inv.order?.customer?.name || 'Consumidor final'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{inv.order?.customer?.code || '-'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{Number(inv.order?.pointsUsed || 0)}</td>
+                  <td className="px-4 py-2 font-semibold whitespace-nowrap">{formatCurrency(Number(inv.order?.pointsDiscount || 0), settings)}</td>
+                </tr>
+              ))}
+              {pointsDiscountRows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Sin descuentos por puntos en el rango seleccionado.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-gray-900">Facturas emitidas</h2>
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setInvoiceFilter('all')}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  invoiceFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setInvoiceFilter('points')}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  invoiceFilter === 'points' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                Con puntos
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={() => downloadCsv(
+              `reporte_facturas_${invoiceFilter}_${fileSuffix}.csv`,
+              ['Fecha', 'Factura', 'Cliente', 'Método', 'Estado', 'Puntos usados', 'Descuento puntos', 'Subtotal', 'Impuestos', 'Total'],
+              filteredInvoices.map((inv) => [
                 new Date(inv.createdAt).toLocaleString('es-CR'),
                 inv.invoiceNumber,
                 inv.customerName || 'Consumidor final',
                 labelPaymentMethod(inv.paymentMethod),
                 inv.status || '-',
+                Number(inv.order?.pointsUsed || 0),
+                Number(inv.order?.pointsDiscount || 0).toFixed(2),
                 Number(inv.subtotal || 0).toFixed(2),
                 Number(inv.taxAmount || 0).toFixed(2),
                 Number(inv.total || 0).toFixed(2),
@@ -319,7 +539,7 @@ export default function ReportsPage() {
           </button>
         </div>
         <div className="overflow-auto max-h-96">
-          <table className="w-full min-w-[980px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Fecha</th>
@@ -327,27 +547,96 @@ export default function ReportsPage() {
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Cliente</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Método</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Estado</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Puntos usados</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Desc. puntos</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Subtotal</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Impuestos</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {invoices.map((inv) => (
+              {filteredInvoices.map((inv) => (
                 <tr key={inv.id}>
                   <td className="px-4 py-2 whitespace-nowrap">{new Date(inv.createdAt).toLocaleString('es-CR')}</td>
                   <td className="px-4 py-2 font-mono whitespace-nowrap">{inv.invoiceNumber}</td>
                   <td className="px-4 py-2">{inv.customerName || 'Consumidor final'}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{labelPaymentMethod(inv.paymentMethod)}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{inv.status || '-'}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{Number(inv.order?.pointsUsed || 0)}</td>
+                  <td className="px-4 py-2 whitespace-nowrap">{formatCurrency(Number(inv.order?.pointsDiscount || 0), settings)}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{formatCurrency(inv.subtotal || 0, settings)}</td>
                   <td className="px-4 py-2 whitespace-nowrap">{formatCurrency(inv.taxAmount || 0, settings)}</td>
                   <td className="px-4 py-2 font-semibold whitespace-nowrap">{formatCurrency(inv.total || 0, settings)}</td>
                 </tr>
               ))}
-              {invoices.length === 0 && (
+              {filteredInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Sin facturas en el rango seleccionado.</td>
+                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                    {invoiceFilter === 'points'
+                      ? 'No hay facturas con descuento por puntos en el rango seleccionado.'
+                      : 'Sin facturas en el rango seleccionado.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-gray-900">Ventas por categoría</h2>
+          <button
+            onClick={() => downloadCsv(
+              `reporte_ventas_categoria_${fileSuffix}.csv`,
+              ['Categoría', 'Órdenes', 'Unidades vendidas', 'Total', '% del total'],
+              categorySales.map((row) => [
+                row.categoryName,
+                row.orderCount,
+                row.totalQuantity,
+                Number(row.totalRevenue).toFixed(2),
+                `${row.percentage}%`,
+              ]),
+            )}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            Exportar CSV
+          </button>
+        </div>
+        <div className="overflow-auto max-h-80">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Categoría</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Órdenes</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Unidades vendidas</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Total</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">% del total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {categorySales.map((row) => (
+                <tr key={row.categoryId}>
+                  <td className="px-4 py-2 font-medium">{row.categoryName}</td>
+                  <td className="px-4 py-2">{row.orderCount}</td>
+                  <td className="px-4 py-2">{row.totalQuantity}</td>
+                  <td className="px-4 py-2 font-semibold whitespace-nowrap">{formatCurrency(row.totalRevenue, settings)}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden min-w-[60px]">
+                        <div
+                          className="h-2 bg-brand-500 rounded-full"
+                          style={{ width: `${row.percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-600 whitespace-nowrap">{row.percentage}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {categorySales.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Sin ventas en el rango seleccionado.</td>
                 </tr>
               )}
             </tbody>

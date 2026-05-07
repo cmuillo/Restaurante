@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Invoice } from '../billing/entities/invoice.entity';
 import { Expense } from '../expenses/entities/expense.entity';
+import { Category } from '../menu/entities/category.entity';
 
 @Injectable()
 export class ReportsService {
@@ -11,6 +12,7 @@ export class ReportsService {
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(Invoice) private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(Expense) private readonly expenseRepository: Repository<Expense>,
+    @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
   ) {}
 
   private normalizeDateRange(from: Date, to: Date): { fromStart: Date; toExclusive: Date } {
@@ -42,8 +44,14 @@ export class ReportsService {
         'SUM(inv.discountAmount) AS discount_amount',
         'SUM(order.pointsDiscount) AS points_discount',
         'SUM(inv.total) AS total_sales',
-        "SUM(CASE WHEN inv.paymentMethod = 'cash' THEN inv.total ELSE 0 END) AS cash_sales",
-        "SUM(CASE WHEN inv.paymentMethod = 'card' THEN inv.total ELSE 0 END) AS card_sales",
+        `SUM(CASE
+          WHEN inv."paymentMethod" = 'cash' THEN inv.total
+          WHEN inv."paymentMethod" = 'mixed' THEN COALESCE((inv."paymentDetails"->>'cash')::numeric, 0)
+          ELSE 0 END) AS cash_sales`,
+        `SUM(CASE
+          WHEN inv."paymentMethod" = 'card' THEN inv.total
+          WHEN inv."paymentMethod" = 'mixed' THEN COALESCE((inv."paymentDetails"->>'card')::numeric, 0)
+          ELSE 0 END) AS card_sales`,
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('inv.createdAt BETWEEN :start AND :end', { start: startOfDay, end: endOfDay })
@@ -78,6 +86,7 @@ export class ReportsService {
         'SUM(inv.total) AS total',
         'SUM(inv.taxAmount) AS tax',
         'SUM(order.pointsDiscount) AS points_discount',
+        'SUM(CASE WHEN order.pointsDiscount > 0 THEN 1 ELSE 0 END) AS invoices_with_points',
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('inv.createdAt >= :from', { from: fromStart })
@@ -93,6 +102,7 @@ export class ReportsService {
       total: parseFloat(r.total ?? '0'),
       tax: parseFloat(r.tax ?? '0'),
       pointsDiscount: parseFloat(r.points_discount ?? '0'),
+      invoicesWithPoints: parseInt(r.invoices_with_points ?? '0', 10),
     }));
 
     const totals = dailyBreakdown.reduce(
@@ -101,8 +111,9 @@ export class ReportsService {
         tax: acc.tax + r.tax,
         pointsDiscount: acc.pointsDiscount + r.pointsDiscount,
         orders: acc.orders + r.orderCount,
+        invoicesWithPoints: acc.invoicesWithPoints + r.invoicesWithPoints,
       }),
-      { total: 0, tax: 0, pointsDiscount: 0, orders: 0 },
+      { total: 0, tax: 0, pointsDiscount: 0, orders: 0, invoicesWithPoints: 0 },
     );
 
     return { dailyBreakdown, ...totals };
@@ -135,6 +146,42 @@ export class ReportsService {
       productName: r.product_name,
       totalQuantity: parseInt(r.total_quantity, 10),
       totalRevenue: parseFloat(r.total_revenue ?? '0'),
+    }));
+  }
+
+  /** Clientes con más compras en el periodo */
+  async topCustomers(branchId: string, from: Date, to: Date, limit = 10) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
+    const rows = await this.orderRepository
+      .createQueryBuilder('order')
+      .leftJoin('order.customer', 'customer')
+      .select([
+        'customer.id AS customer_id',
+        'customer.name AS customer_name',
+        'customer.code AS customer_code',
+        'COUNT(order.id) AS purchase_count',
+        'SUM(order.total) AS total_spent',
+        'MAX(order.createdAt) AS last_purchase_at',
+      ])
+      .where('order.branchId = :branchId', { branchId })
+      .andWhere('order.status = :status', { status: OrderStatus.COMPLETED })
+      .andWhere('order.customerId IS NOT NULL')
+      .andWhere('order.createdAt >= :from', { from: fromStart })
+      .andWhere('order.createdAt < :to', { to: toExclusive })
+      .groupBy('customer.id, customer.name, customer.code')
+      .orderBy('purchase_count', 'DESC')
+      .addOrderBy('total_spent', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return rows.map((r) => ({
+      customerId: r.customer_id,
+      customerName: r.customer_name,
+      customerCode: r.customer_code,
+      purchaseCount: parseInt(r.purchase_count, 10),
+      totalSpent: parseFloat(r.total_spent ?? '0'),
+      lastPurchaseAt: r.last_purchase_at,
     }));
   }
 
@@ -203,5 +250,43 @@ export class ReportsService {
       })),
       grossProfit: parseFloat(salesData?.total_sales || '0') - totalExpenses,
     };
+  }
+
+  /** Ventas por categoría de producto */
+  async salesByCategory(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
+    const rows = await this.orderRepository
+      .createQueryBuilder('order')
+      .innerJoin('order.items', 'item')
+      .innerJoin('item.product', 'product')
+      .innerJoin('product.category', 'category')
+      .select([
+        'category.id AS category_id',
+        'category.name AS category_name',
+        'COUNT(DISTINCT order.id) AS order_count',
+        'SUM(item.quantity) AS total_quantity',
+        'SUM(item.subtotal) AS total_revenue',
+      ])
+      .where('order.branchId = :branchId', { branchId })
+      .andWhere('order.status = :status', { status: OrderStatus.COMPLETED })
+      .andWhere('order.createdAt >= :from', { from: fromStart })
+      .andWhere('order.createdAt < :to', { to: toExclusive })
+      .groupBy('category.id, category.name')
+      .orderBy('total_revenue', 'DESC')
+      .getRawMany();
+
+    const grandTotal = rows.reduce((sum, r) => sum + parseFloat(r.total_revenue ?? '0'), 0);
+
+    return rows.map((r) => ({
+      categoryId: r.category_id,
+      categoryName: r.category_name,
+      orderCount: parseInt(r.order_count, 10),
+      totalQuantity: parseInt(r.total_quantity, 10),
+      totalRevenue: parseFloat(r.total_revenue ?? '0'),
+      percentage: grandTotal > 0
+        ? +((parseFloat(r.total_revenue ?? '0') / grandTotal) * 100).toFixed(1)
+        : 0,
+    }));
   }
 }

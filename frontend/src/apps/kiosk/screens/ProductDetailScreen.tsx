@@ -36,7 +36,10 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
     return sum + (opt?.extraPrice ?? 0);
   }, 0);
 
-  const unitTotal = (Number(product.price) + extraPrice) * quantity;
+  const taxRate: number = product.taxRate ?? 0;
+  const baseUnitPrice = Number(product.price) + extraPrice;
+  // Precio con IVA para mostrar al cliente
+  const unitTotal = baseUnitPrice * (1 + taxRate / 100) * quantity;
 
   const handleAdd = () => {
     const modifiersList = Object.entries(selectedModifiers).map(([modId, optId]) => {
@@ -47,7 +50,8 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
     addToCart({
       productId: product.id,
       productName: product.name,
-      price: Number(product.price) + extraPrice,
+      price: baseUnitPrice,  // base sin IVA (el backend lo usa para calcular el impuesto)
+      taxRate,
       quantity,
       notes: notes.trim() || undefined,
       modifiers: modifiersList,

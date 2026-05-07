@@ -23,7 +23,11 @@ export class BranchesService {
     return saved;
   }
 
-  findAll(): Promise<Branch[]> {
+  findAll(includeInactive = false): Promise<Branch[]> {
+    if (includeInactive) {
+      return this.branchRepository.find({ order: { name: 'ASC' } });
+    }
+
     return this.branchRepository.find({ where: { isActive: true }, order: { name: 'ASC' } });
   }
 

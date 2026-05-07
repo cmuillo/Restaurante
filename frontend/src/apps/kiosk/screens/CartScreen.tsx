@@ -12,7 +12,9 @@ export default function CartScreen({
 }) {
   const { cart, removeFromCart, goTo } = useKioskStore();
   const settings = useSettings();
-  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const taxAmount = cart.reduce((s, i) => s + i.price * i.quantity * (i.taxRate / 100), 0);
+  const total = subtotal + taxAmount;
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-900">
@@ -39,8 +41,8 @@ export default function CartScreen({
               {item.notes && <p className="text-sm text-yellow-400 mt-0.5">📝 {item.notes}</p>}
             </div>
             <div className="text-right">
-              <p className="text-base text-gray-400">{item.quantity}× {formatCurrency(item.price, settings)}</p>
-              <p className="text-xl font-bold text-brand-400">{formatCurrency(item.price * item.quantity, settings)}</p>
+              <p className="text-base text-gray-400">{item.quantity}× {formatCurrency(item.price * (1 + item.taxRate / 100), settings)}</p>
+              <p className="text-xl font-bold text-brand-400">{formatCurrency(item.price * (1 + item.taxRate / 100) * item.quantity, settings)}</p>
             </div>
             <button
               onClick={() => removeFromCart(item.productId)}
@@ -55,6 +57,14 @@ export default function CartScreen({
       {/* Footer */}
       {cart.length > 0 && (
         <div className="px-6 py-5 bg-gray-800 border-t border-gray-700 space-y-4">
+          <div className="flex justify-between text-sm text-gray-400 mb-1">
+            <span>Subtotal</span>
+            <span>{formatCurrency(subtotal, settings)}</span>
+          </div>
+          <div className="flex justify-between text-sm text-gray-400 mb-1">
+            <span>Impuestos</span>
+            <span>{formatCurrency(taxAmount, settings)}</span>
+          </div>
           <div className="flex justify-between text-2xl font-bold text-white">
             <span>{t.total}</span>
             <span className="text-brand-400">{formatCurrency(total, settings)}</span>

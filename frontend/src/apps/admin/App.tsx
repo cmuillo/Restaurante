@@ -10,7 +10,7 @@ import OrdersPage from './pages/OrdersPage';
 import UsersPage from './pages/UsersPage';
 import BranchesPage from './pages/BranchesPage';
 import ReportsPage from './pages/ReportsPage';
-import InventoryPage from './pages/InventoryPage';
+import ExpensesPage from './pages/ExpensesPage';
 import CustomersPage from './pages/CustomersPage';
 import HaciendaConfigPage from './pages/HaciendaConfigPage';
 import InvoicesPage from './pages/InvoicesPage';
@@ -42,7 +42,7 @@ function AppContent() {
         <Route path="users" element={<UsersPage />} />
         <Route path="branches" element={<BranchesPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="inventory" element={<InventoryPage />} />
+        <Route path="expenses" element={<ExpensesPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="hacienda" element={<HaciendaConfigPage />} />
         <Route path="settings" element={<SettingsPage />} />

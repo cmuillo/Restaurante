@@ -12,6 +12,7 @@ interface CartItem {
   productName: string;
   price: number;
   quantity: number;
+  taxRate: number;
 }
 
 interface PendingOrderItem {
@@ -38,6 +39,7 @@ interface PendingOrder {
     id: string;
     name: string;
     code: string;
+    email?: string;
     loyaltyPoints: number;
   } | null;
   items: PendingOrderItem[];
@@ -438,7 +440,7 @@ export default function PosPage() {
     };
   }, []);
 
-  const addToCart = (product: { id: string; name: string; price: number }) => {
+  const addToCart = (product: { id: string; name: string; price: number; taxRate?: number }) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
       if (existing) {
@@ -448,7 +450,7 @@ export default function PosPage() {
       }
       return [
         ...prev,
-        { productId: product.id, productName: product.name, price: product.price, quantity: 1 },
+        { productId: product.id, productName: product.name, price: product.price, quantity: 1, taxRate: product.taxRate ?? 0 },
       ];
     });
   };
@@ -465,8 +467,8 @@ export default function PosPage() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const taxPercentage = Number(kioskMenuConfig?.branchConfig?.taxPercentage ?? 0);
-  const taxAmount = subtotal * (taxPercentage / 100);
+  const taxAmount = cart.reduce((sum, item) => sum + item.price * item.quantity * (item.taxRate / 100), 0);
+  const taxPercentage = Number(kioskMenuConfig?.branchConfig?.taxPercentage ?? 0); // fallback para el API
   const totalWithTax = subtotal + taxAmount;
   const missingRequiredTable = orderType === 'DINE_IN' && !tableId;
 
@@ -682,21 +684,22 @@ export default function PosPage() {
               <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start">
                 {products
                   .filter((p: { isActive: boolean }) => p.isActive)
-                  .map((p: { id: string; name: string; price: number; imageUrl?: string }) => (
+                  .map((p: { id: string; name: string; price: number; imageUrl?: string; taxRate?: number }) => (
                     <button
                       key={p.id}
                       onClick={() => addToCart(p)}
-                      className="bg-white rounded-xl border border-gray-200 p-3 text-left hover:shadow-md hover:border-brand-400 active:scale-95 transition-all"
+                      className="aspect-square relative overflow-hidden rounded-xl border border-gray-200 hover:shadow-md active:scale-95 transition-all text-left bg-gray-100"
                     >
                       {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-20 object-cover rounded-lg mb-2" />
+                        <img src={p.imageUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-20 bg-gray-100 rounded-lg mb-2 flex items-center justify-center text-xs text-gray-400">
-                          Sin imagen
-                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center text-2xl text-gray-300">🍽️</div>
                       )}
-                      <p className="text-xs font-medium text-gray-800 line-clamp-2">{p.name}</p>
-                      <p className="text-sm font-bold text-brand-600 mt-0.5">{formatCurrency(p.price, settings)}</p>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      <div className="absolute bottom-0 left-0 right-0 p-2">
+                        <p className="text-xs font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
+                        <p className="text-sm font-bold text-orange-300 mt-0.5">{formatCurrency(p.price, settings)}</p>
+                      </div>
                     </button>
                   ))}
               </div>
@@ -822,7 +825,7 @@ export default function PosPage() {
                       <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
                       <button
                         onClick={() =>
-                          addToCart({ id: item.productId, name: item.productName, price: item.price })
+                          addToCart({ id: item.productId, name: item.productName, price: item.price, taxRate: item.taxRate })
                         }
                         className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-xs font-bold"
                       >
@@ -842,7 +845,7 @@ export default function PosPage() {
                   <span className="font-medium">{formatCurrency(subtotal, settings)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Impuesto ({taxPercentage.toFixed(2)}%)</span>
+                  <span>Impuesto</span>
                   <span>{formatCurrency(taxAmount, settings)}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2 font-semibold">

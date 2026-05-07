@@ -13,6 +13,7 @@ export interface GlobalSettings {
   currencySymbol: string;
   currencyLocale: string;
   theme: 'light' | 'dark';
+  brandColor: string;
   defaultTaxRate: number;
   tipSuggestions: number[];
   invoiceFooterMessage: string | null;
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   currencySymbol: '₡',
   currencyLocale: 'es-CR',
   theme: 'light',
+  brandColor: '#ea580c',
   defaultTaxRate: 13,
   tipSuggestions: [10, 15, 18],
   invoiceFooterMessage: null,

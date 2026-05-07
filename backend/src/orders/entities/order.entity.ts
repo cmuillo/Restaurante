@@ -98,6 +98,9 @@ export class Order {
   total: number;
 
   @Column({ nullable: true })
+  preparationStartedAt: Date;
+
+  @Column({ nullable: true })
   kitchenPrintedAt: Date;
 
   @Column({ nullable: true })

@@ -101,6 +101,7 @@ export default function MenuPage() {
     name: '',
     description: '',
     price: '',
+    salePrice: '',
     sku: '',
     categoryId: '',
     imageUrl: '',
@@ -117,6 +118,7 @@ export default function MenuPage() {
   });
   const [prodFormError, setProdFormError] = useState('');
   const [prodFieldErrors, setProdFieldErrors] = useState<Record<string, string>>({});
+  const [imageUploadError, setImageUploadError] = useState('');
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories', branchId],
@@ -200,10 +202,12 @@ export default function MenuPage() {
   function openNewProd() {
     setEditProd(null);
     setCabysQuery('');
+    setImageUploadError('');
     setProdForm({
       name: '',
       description: '',
       price: '',
+      salePrice: '',
       sku: '',
       categoryId: activeCategory ?? '',
       imageUrl: '',
@@ -225,14 +229,21 @@ export default function MenuPage() {
   function openEditProd(p: Product) {
     setEditProd(p);
     setCabysQuery(p.cabysCode ?? '');
+    const taxRateNum = p.taxRate ?? 0;
+    const basePriceNum = Number(p.price);
+    const salePriceNum = taxRateNum > 0 ? basePriceNum * (1 + taxRateNum / 100) : 0;
+    setImageUploadError('');
     setProdForm({
       name: p.name,
       description: p.description ?? '',
       price: String(p.price),
+      salePrice: taxRateNum > 0 ? salePriceNum.toFixed(2) : String(p.price),
       sku: p.sku ?? '',
       categoryId: p.categoryId ?? '',
       imageUrl: p.imageUrl ?? '',
-      allergensText: (p.allergens ?? []).join(', '),      pointsPerPurchase: p.pointsPerPurchase === undefined ? '' : String(p.pointsPerPurchase),      isActive: p.isActive,
+      allergensText: (p.allergens ?? []).join(', '),
+      pointsPerPurchase: p.pointsPerPurchase === undefined ? '' : String(p.pointsPerPurchase),
+      isActive: p.isActive,
       showInKiosk: p.showInKiosk ?? true,
       cabysCode: p.cabysCode ?? '',
       commercialCodeType: p.commercialCodeType ?? '04',
@@ -264,6 +275,40 @@ export default function MenuPage() {
     }));
     setCabysQuery(item.code);
     setProdFieldErrors((prev) => ({ ...prev, cabysCode: '' }));
+  }
+
+  function handleSaveProd() {
+    if (!prodForm.salePrice) {
+      setProdFormError('Introduce el precio de venta del producto.');
+      return;
+    }
+    if (!prodForm.categoryId) {
+      setProdFormError('Selecciona una categoría.');
+      return;
+    }
+    setProdFormError('');
+    saveProd.mutate(buildProductPayload());
+  }
+
+  function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1 * 1024 * 1024) {
+      setImageUploadError('La imagen debe ser menor a 1 MB.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Solo se permiten imágenes (jpg, png, webp...).');
+      return;
+    }
+    setImageUploadError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setProdForm((prev) => ({ ...prev, imageUrl: ev.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+    // reset input so same file can be re-selected
+    e.target.value = '';
   }
 
   function buildProductPayload() {
@@ -430,10 +475,34 @@ export default function MenuPage() {
                     {prodFieldErrors.name && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio *</label>
-                    <input type="number" step="0.01" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.price} onChange={(e) => { setProdForm({ ...prodForm, price: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, price: '' })); }} placeholder="0.00" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio de venta (con IVA) *</label>
+                    <input
+                      type="number" step="0.01"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      value={prodForm.salePrice}
+                      onChange={(e) => {
+                        const sp = e.target.value;
+                        const tax = Number(prodForm.taxRate) || 0;
+                        const base = sp !== '' && !isNaN(Number(sp))
+                          ? (Number(sp) / (1 + tax / 100)).toFixed(2)
+                          : '';
+                        setProdForm((prev) => ({ ...prev, salePrice: sp, price: base }));
+                        setProdFieldErrors((prev) => ({ ...prev, price: '' }));
+                      }}
+                      placeholder="Ej: 2034 (incluye IVA)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio base (sin IVA) *</label>
+                    <input
+                      type="number" step="0.01"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
+                      value={prodForm.price}
+                      readOnly
+                      placeholder="Se calcula automático"
+                    />
                     {prodFieldErrors.price && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.price}</p>}
+                    <p className="text-xs text-gray-400 mt-0.5">Calculado: precio de venta ÷ (1 + IVA%)</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
@@ -450,10 +519,30 @@ export default function MenuPage() {
                       value={prodForm.sku} onChange={(e) => { setProdForm({ ...prodForm, sku: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, sku: '' })); }} placeholder="Opcional" />
                     {prodFieldErrors.sku && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.sku}</p>}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">URL de imagen</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.imageUrl} onChange={(e) => { setProdForm({ ...prodForm, imageUrl: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, imageUrl: '' })); }} placeholder="https://..." />
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del producto</label>
+                    {prodForm.imageUrl ? (
+                      <div className="flex items-center gap-3">
+                        <img src={prodForm.imageUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
+                        <div className="flex flex-col gap-1">
+                          <label className="cursor-pointer px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg inline-block">
+                            Cambiar imagen
+                            <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+                          </label>
+                          <button type="button" onClick={() => { setProdForm((p) => ({ ...p, imageUrl: '' })); setImageUploadError(''); }} className="text-xs text-red-500 hover:text-red-700 text-left">Eliminar imagen</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-lg px-4 py-3 hover:border-brand-400 transition-colors">
+                        <span className="text-2xl">📷</span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Seleccionar imagen</p>
+                          <p className="text-xs text-gray-400">JPG, PNG, WEBP — máximo 1 MB</p>
+                        </div>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+                      </label>
+                    )}
+                    {imageUploadError && <p className="text-xs text-red-600 mt-1">{imageUploadError}</p>}
                     {prodFieldErrors.imageUrl && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.imageUrl}</p>}
                   </div>
                   <div className="sm:col-span-2">
@@ -477,21 +566,21 @@ export default function MenuPage() {
                 <p className="text-sm font-semibold text-gray-700">Datos fiscales (Hacienda)</p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Código CABYS</label>
+                  {prodForm.cabysCode && (
+                    <p className="text-xs font-mono text-brand-700 bg-brand-50 border border-brand-200 rounded px-2 py-1 mb-1">
+                      Seleccionado: {prodForm.cabysCode}
+                    </p>
+                  )}
                   <input
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    value={prodForm.cabysCode}
+                    value={cabysQuery}
                     onChange={(e) => {
-                      setProdForm({ ...prodForm, cabysCode: e.target.value });
-                      setCabysQuery(e.target.value);
+                      const v = e.target.value;
+                      setCabysQuery(v);
+                      setProdForm((prev) => ({ ...prev, cabysCode: v }));
                       setProdFieldErrors((prev) => ({ ...prev, cabysCode: '' }));
                     }}
-                    placeholder="Ej: 5017189901000"
-                  />
-                  <input
-                    className="w-full mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    value={cabysQuery}
-                    onChange={(e) => setCabysQuery(e.target.value)}
-                    placeholder="Buscar CABYS por codigo o nombre"
+                    placeholder="Buscar por código o nombre de CABYS"
                   />
                   <div className="mt-2 border border-gray-200 rounded-lg max-h-32 overflow-y-auto bg-gray-50">
                     {cabysSuggestions.map((item) => (
@@ -531,7 +620,15 @@ export default function MenuPage() {
                       step="0.01"
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       value={prodForm.taxRate}
-                      onChange={(e) => { setProdForm({ ...prodForm, taxRate: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, taxRate: '' })); }}
+                      onChange={(e) => {
+                        const tax = e.target.value;
+                        const sp = Number(prodForm.salePrice);
+                        const base = prodForm.salePrice !== '' && !isNaN(sp) && Number(tax) > 0
+                          ? (sp / (1 + Number(tax) / 100)).toFixed(2)
+                          : prodForm.price;
+                        setProdForm((prev) => ({ ...prev, taxRate: tax, price: base }));
+                        setProdFieldErrors((prev) => ({ ...prev, taxRate: '' }));
+                      }}
                       placeholder="13"
                     />
                     {prodFieldErrors.taxRate && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.taxRate}</p>}
@@ -595,8 +692,8 @@ export default function MenuPage() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowProdModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
               <button
-                onClick={() => saveProd.mutate(buildProductPayload())}
-                disabled={!prodForm.name || !prodForm.price || !prodForm.categoryId || saveProd.isPending}
+                onClick={handleSaveProd}
+                disabled={!prodForm.name || saveProd.isPending}
                 className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
                 {saveProd.isPending ? 'Guardando...' : 'Guardar'}
               </button>

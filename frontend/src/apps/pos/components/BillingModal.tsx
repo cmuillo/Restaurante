@@ -27,6 +27,7 @@ interface BillingModalProps {
       id: string;
       name: string;
       code?: string;
+      email?: string;
       loyaltyPoints?: number;
     } | null;
     items: {
@@ -40,6 +41,7 @@ interface BillingModalProps {
     id: string;
     name: string;
     code: string;
+    email?: string;
     loyaltyPoints: number;
   } | null;
   initialStep?: 'payment' | 'cancelling';
@@ -47,7 +49,7 @@ interface BillingModalProps {
   onCancelled?: () => void;
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'qr' | 'mixed';
+export type PaymentMethod = 'cash' | 'card' | 'mixed';
 
 interface PrintableInvoiceItem {
   productName: string;
@@ -137,17 +139,91 @@ function formatDateTime(value?: string): string {
 function paymentMethodLabel(value?: string): string {
   if (value === 'cash') return 'Efectivo';
   if (value === 'card') return 'Tarjeta';
-  if (value === 'qr') return 'QR';
   if (value === 'mixed') return 'Mixto';
   return 'No indicado';
+}
+
+function buildPos80mmReceiptHtml(params: {
+  invoiceNumber: string;
+  issueDate: string;
+  paymentLabel: string;
+  customerName: string;
+  orderNumber: number;
+  items: PrintableInvoiceItem[];
+  totals: {
+    subtotal: number;
+    taxAmount: number;
+    discountAmount: number;
+    total: number;
+    cashReceived: number;
+    change: number;
+  };
+}) {
+  const rows = params.items
+    .map((item) => `
+      <tr>
+        <td>${escapeHtml(item.productName || '')}<br/><span class="meta">${toAmount(item.quantity).toFixed(0)} x ${formatMoney(item.unitPrice)}</span></td>
+        <td class="num">${formatMoney(item.total)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Ticket ${escapeHtml(params.invoiceNumber)}</title>
+  <style>
+    @page { size: 80mm auto; margin: 4mm; }
+    html, body { width: 72mm; margin: 0; font-family: 'Courier New', monospace; font-size: 11px; color: #000; }
+    .title { text-align: center; font-weight: 700; margin-bottom: 4px; }
+    .meta { font-size: 10px; }
+    .line { border-top: 1px dashed #000; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { vertical-align: top; padding: 2px 0; }
+    .num { text-align: right; white-space: nowrap; }
+    .totals td { padding: 1px 0; }
+    .total td { font-weight: 700; font-size: 12px; }
+    .center { text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="title">FACTURA / TICKET</div>
+  <div class="center meta">#${escapeHtml(params.invoiceNumber)}</div>
+  <div class="center meta">${escapeHtml(params.issueDate)}</div>
+  <div class="line"></div>
+  <div class="meta">Orden: #${params.orderNumber}</div>
+  <div class="meta">Cliente: ${escapeHtml(params.customerName)}</div>
+  <div class="meta">Pago: ${escapeHtml(params.paymentLabel)}</div>
+  <div class="line"></div>
+  <table>
+    ${rows}
+  </table>
+  <div class="line"></div>
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="num">${formatMoney(params.totals.subtotal)}</td></tr>
+    <tr><td>Impuestos</td><td class="num">${formatMoney(params.totals.taxAmount)}</td></tr>
+    <tr><td>Descuento</td><td class="num">-${formatMoney(params.totals.discountAmount)}</td></tr>
+    <tr class="total"><td>Total</td><td class="num">${formatMoney(params.totals.total)}</td></tr>
+    ${params.totals.cashReceived > 0 ? `<tr><td>Efectivo</td><td class="num">${formatMoney(params.totals.cashReceived)}</td></tr>` : ''}
+    ${params.totals.change > 0 ? `<tr><td>Cambio</td><td class="num">${formatMoney(params.totals.change)}</td></tr>` : ''}
+  </table>
+  <div class="line"></div>
+  <div class="center meta">Gracias por su compra</div>
+</body>
+</html>`;
 }
 
 export function BillingModal({ isOpen, branchId, order, customer, initialStep = 'payment', onClose, onCancelled }: BillingModalProps) {
   const settings = useSettings();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashReceived, setCashReceived] = useState<number>(0);
+  const [mixedCashAmount, setMixedCashAmount] = useState<number>(0);
+  const [mixedCashReceived, setMixedCashReceived] = useState<number>(0);
   const [usePoints, setUsePoints] = useState<boolean>(false);
   const [pointsToUse, setPointsToUse] = useState<number>(0);
+  const [invoiceEmail, setInvoiceEmail] = useState<string>('');
   const [invoice, setInvoice] = useState<any>(null);
   const [step, setStep] = useState<'payment' | 'cancelling' | 'cancelled' | 'invoice'>(initialStep);
   const [cancelReason, setCancelReason] = useState<string>(CANCEL_REASONS[0]);
@@ -157,6 +233,9 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
     if (!isOpen || !order) return;
     setPaymentMethod('cash');
     setCashReceived(toAmount(order.total));
+    setMixedCashAmount(0);
+    setMixedCashReceived(0);
+    setInvoiceEmail(customer?.email || order.customer?.email || '');
     setInvoice(null);
     setStep(initialStep);
     setUsePoints(false);
@@ -167,9 +246,17 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
 
   // Mantiene el efectivo sugerido alineado al total final cuando cambia el descuento por puntos.
   useEffect(() => {
-    if (!isOpen || !order || paymentMethod !== 'cash') return;
+    if (!isOpen || !order) return;
     const effectiveTotal = Math.max(0, toAmount(order.total) - (usePoints ? pointsToUse : 0));
-    setCashReceived(effectiveTotal);
+    if (paymentMethod === 'cash') {
+      setCashReceived(effectiveTotal);
+      return;
+    }
+    if (paymentMethod === 'mixed') {
+      const suggestedCash = Math.min(mixedCashAmount, effectiveTotal);
+      setMixedCashAmount(suggestedCash);
+      setMixedCashReceived(suggestedCash);
+    }
   }, [isOpen, order, paymentMethod, usePoints, pointsToUse]);
 
   const cancelOrder = useMutation({
@@ -192,7 +279,17 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
         .post('/billing/invoices', {
           orderId: order?.id,
           paymentMethod,
-          cashReceived: paymentMethod === 'cash' ? cashReceived : discountedTotal,
+          paymentDetails: paymentMethod === 'mixed'
+            ? {
+              cash: mixedCashAmount,
+              card: Math.max(0, discountedTotal - mixedCashAmount),
+            }
+            : undefined,
+          cashReceived: paymentMethod === 'cash'
+            ? cashReceived
+            : paymentMethod === 'mixed'
+              ? mixedCashReceived
+              : 0,
           customerName: customer?.name || order?.customer?.name,
           pointsUsed: usePoints ? pointsToUse : 0,
         })
@@ -203,6 +300,10 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
     },
   });
 
+  const sendInvoiceEmail = useMutation({
+    mutationFn: () => api.post(`/billing/invoices/${invoice?.id}/send-email`, { email: invoiceEmail }).then((r) => r.data),
+  });
+
   if (!isOpen || !order) return null;
 
   const subtotal = toAmount(order.subtotal);
@@ -210,8 +311,12 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   const tipAmount = toAmount(order.tipAmount);
   const discountAmount = toAmount(order.discountAmount);
   const total = toAmount(order.total);
+  const availableLoyaltyPoints = customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0;
+  const maxPointsAllowed = Math.min(availableLoyaltyPoints, Math.max(0, total));
   const discountedTotal = Math.max(0, total - (usePoints ? pointsToUse : 0));
   const change = paymentMethod === 'cash' ? Math.max(0, cashReceived - discountedTotal) : 0;
+  const mixedCardAmount = Math.max(0, discountedTotal - mixedCashAmount);
+  const mixedChange = paymentMethod === 'mixed' ? Math.max(0, mixedCashReceived - mixedCashAmount) : 0;
 
   const printInvoiceReport = () => {
     const printable = (invoice?.printable || {}) as PrintableInvoiceData;
@@ -236,156 +341,51 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
     const totals = {
       subtotal: toAmount(printable.totals?.subtotal ?? subtotal),
       taxAmount: toAmount(printable.totals?.taxAmount ?? taxAmount),
-      tipAmount: toAmount(printable.totals?.tipAmount ?? tipAmount),
       discountAmount: toAmount(printable.totals?.discountAmount ?? discountAmount),
-      pointsUsed: toAmount(printable.totals?.pointsUsed ?? (usePoints ? pointsToUse : 0)),
-      pointsDiscount: toAmount(printable.totals?.pointsDiscount ?? (usePoints ? pointsToUse : 0)),
       total: toAmount(printable.totals?.total ?? total),
       cashReceived: toAmount(printable.totals?.cashReceived ?? invoice?.cashReceived),
       change: toAmount(printable.totals?.change ?? invoice?.change),
     };
 
-    const issuer = printable.issuer || {};
     const invoiceInfo = printable.invoice || {};
-    const orderInfo = printable.order || {};
-    const issueDate = formatDateTime(invoiceInfo.issuedAt || invoice?.createdAt);
-    const sourceLabel =
-      orderInfo.table
-        || (orderInfo.type === 'kiosk'
-          ? 'Kiosko'
-          : orderInfo.type === 'takeout'
-            ? 'Para llevar'
-            : orderInfo.type === 'delivery'
-              ? 'Delivery'
-              : 'Mesa');
+    const html = buildPos80mmReceiptHtml({
+      invoiceNumber: String(invoice?.invoiceNumber || invoiceInfo.invoiceNumber || 'N/A'),
+      issueDate: formatDateTime(invoiceInfo.issuedAt || invoice?.createdAt),
+      paymentLabel: paymentMethodLabel(invoiceInfo.paymentMethod || invoice?.paymentMethod),
+      customerName: invoice?.customerName || printable.order?.customer?.name || customer?.name || order?.customer?.name || 'Consumidor final',
+      orderNumber: order.orderNumber,
+      items: computedItems,
+      totals,
+    });
 
-    const rowsHtml = computedItems
-      .map((item, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${escapeHtml(item.productName || '')}</td>
-          <td class="num">${toAmount(item.quantity).toFixed(2)}</td>
-          <td class="num">${formatMoney(item.unitPrice)}</td>
-          <td class="num">${formatMoney(item.subtotal)}</td>
-          <td class="num">${toAmount(item.taxRate).toFixed(2)}%</td>
-          <td class="num">${formatMoney(item.taxAmount)}</td>
-          <td class="num">${formatMoney(item.total)}</td>
-        </tr>
-      `)
-      .join('');
+    const frame = document.createElement('iframe');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '0';
+    frame.style.height = '0';
+    frame.style.border = '0';
+    document.body.appendChild(frame);
 
-    const notesRows = computedItems
-      .filter((item) => item.notes)
-      .map((item) => `<li>${escapeHtml(item.productName)}: ${escapeHtml(item.notes || '')}</li>`)
-      .join('');
-
-    const html = `
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Factura ${escapeHtml(String(invoice?.invoiceNumber || invoiceInfo.invoiceNumber || ''))}</title>
-  <style>
-    @page { size: A4; margin: 12mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111827; margin: 0; }
-    .wrap { width: 100%; }
-    .header { border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 10px; }
-    .title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
-    .sub { font-size: 12px; margin: 2px 0; color: #374151; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
-    .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; }
-    .box h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; color: #374151; }
-    .box p { margin: 2px 0; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
-    th, td { border: 1px solid #d1d5db; padding: 6px; vertical-align: top; }
-    th { background: #f3f4f6; text-align: left; }
-    .num { text-align: right; white-space: nowrap; }
-    .totals { margin-top: 12px; width: 320px; margin-left: auto; }
-    .totals-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
-    .totals-row.total { font-size: 14px; font-weight: 700; border-top: 1px solid #111827; margin-top: 4px; padding-top: 8px; }
-    .notes { margin-top: 10px; font-size: 11px; }
-    .footer { margin-top: 16px; border-top: 1px solid #d1d5db; padding-top: 8px; font-size: 11px; color: #4b5563; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="header">
-      <p class="title">${escapeHtml(issuer.name || 'Comprobante Electrónico')}</p>
-      <p class="sub">Cédula jurídica: ${escapeHtml((issuer.taxIdType && issuer.taxId) ? `${issuer.taxIdType}-${issuer.taxId}` : issuer.taxId || 'No registrada')}</p>
-      <p class="sub">Dirección: ${escapeHtml(issuer.address || 'No registrada')}</p>
-      <p class="sub">Tel: ${escapeHtml(issuer.phone || 'No registrado')} | Email: ${escapeHtml(issuer.email || 'No registrado')}</p>
-    </div>
-
-    <div class="grid">
-      <div class="box">
-        <h4>Datos de factura</h4>
-        <p><strong>Número:</strong> ${escapeHtml(String(invoice?.invoiceNumber || invoiceInfo.invoiceNumber || 'N/A'))}</p>
-        <p><strong>Fecha:</strong> ${escapeHtml(issueDate)}</p>
-        <p><strong>Método de pago:</strong> ${escapeHtml(paymentMethodLabel(invoiceInfo.paymentMethod || invoice?.paymentMethod))}</p>
-        <p><strong>Clave Hacienda:</strong> ${escapeHtml(invoiceInfo.haciendaKey || invoice?.haciendaKey || 'Pendiente de recepción')}</p>
-        <p><strong>Consecutivo:</strong> ${escapeHtml(invoiceInfo.haciendaConsecutive || invoice?.haciendaConsecutive || 'Pendiente')}</p>
-      </div>
-      <div class="box">
-        <h4>Datos de orden</h4>
-        <p><strong>Orden:</strong> #${escapeHtml(String(orderInfo.orderNumber || order.orderNumber))}</p>
-        <p><strong>Origen:</strong> ${escapeHtml(sourceLabel)}</p>
-        <p><strong>Cliente:</strong> ${escapeHtml(invoice?.customerName || orderInfo.customer?.name || customer?.name || order?.customer?.name || 'Consumidor final')}</p>
-        <p><strong>Identificación:</strong> ${escapeHtml(invoice?.customerTaxId || 'No aplica')}</p>
-        <p><strong>Dirección cliente:</strong> ${escapeHtml(invoice?.customerAddress || 'No aplica')}</p>
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Descripción</th>
-          <th class="num">Cantidad</th>
-          <th class="num">Precio Unit.</th>
-          <th class="num">Subtotal</th>
-          <th class="num">Impuesto %</th>
-          <th class="num">Impuesto</th>
-          <th class="num">Total Línea</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-
-    <div class="totals">
-      <div class="totals-row"><span>Subtotal</span><strong>${formatMoney(totals.subtotal)}</strong></div>
-      <div class="totals-row"><span>Impuesto</span><strong>${formatMoney(totals.taxAmount)}</strong></div>
-      <div class="totals-row"><span>Propina</span><strong>${formatMoney(totals.tipAmount)}</strong></div>
-      <div class="totals-row"><span>Descuento</span><strong>- ${formatMoney(totals.discountAmount)}</strong></div>
-      <div class="totals-row"><span>Puntos usados</span><strong>${toAmount(totals.pointsUsed).toFixed(0)}</strong></div>
-      <div class="totals-row"><span>Monto cubierto con puntos</span><strong>- ${formatMoney(totals.pointsDiscount)}</strong></div>
-      <div class="totals-row total"><span>Total</span><strong>${formatMoney(totals.total)}</strong></div>
-      <div class="totals-row"><span>Efectivo recibido</span><strong>${formatMoney(totals.cashReceived)}</strong></div>
-      <div class="totals-row"><span>Cambio</span><strong>${formatMoney(totals.change)}</strong></div>
-    </div>
-
-    ${notesRows ? `<div class="notes"><strong>Notas de cocina:</strong><ul>${notesRows}</ul></div>` : ''}
-
-    <div class="footer">
-      Comprobante generado por el sistema POS. Documento para impresión del detalle fiscal con desglose de impuestos.
-    </div>
-  </div>
-</body>
-</html>`;
-
-    const printWindow = window.open('', '_blank', 'width=980,height=900');
-    if (!printWindow) {
-      alert('No se pudo abrir la ventana de impresion. Verifica el bloqueador de ventanas emergentes.');
+    const win = frame.contentWindow;
+    const doc = win?.document;
+    if (!doc || !frame.contentWindow) {
+      document.body.removeChild(frame);
+      alert('No se pudo abrir el documento de impresion.');
       return;
     }
 
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      win.focus();
+      win.print();
+      setTimeout(() => {
+        if (document.body.contains(frame)) document.body.removeChild(frame);
+      }, 1200);
+    }, 100);
   };
 
   return (
@@ -473,7 +473,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                       onChange={(e) => {
                         setUsePoints(e.target.checked);
                         if (e.target.checked) {
-                          setPointsToUse(Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1)));
+                          setPointsToUse(maxPointsAllowed);
                         } else {
                           setPointsToUse(0);
                         }
@@ -489,14 +489,14 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                       <input
                         type="number"
                         min="0"
-                        max={Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1))}
+                        max={maxPointsAllowed}
                         value={pointsToUse}
-                        onChange={(e) => setPointsToUse(Math.min(Number(e.target.value), (customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0)))}
+                        onChange={(e) => setPointsToUse(Math.min(Number(e.target.value), maxPointsAllowed))}
                         className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="Cantidad de puntos"
                       />
                       <p className="text-xs text-blue-600">
-                        Descuento: {formatCurrency(pointsToUse, settings)} | Puntos max: {Math.min((customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0), Math.max(0, total - 1))}
+                        Descuento: {formatCurrency(pointsToUse, settings)} | Puntos max: {maxPointsAllowed}
                       </p>
                     </div>
                   )}
@@ -506,18 +506,28 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               {/* Método de pago */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Método de pago</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['cash', 'card', 'qr'] as const).map((method) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {(['cash', 'card', 'mixed'] as const).map((method) => (
                     <button
                       key={method}
-                      onClick={() => setPaymentMethod(method)}
+                      onClick={() => {
+                        setPaymentMethod(method);
+                        if (method === 'cash') {
+                          setCashReceived(discountedTotal);
+                        }
+                        if (method === 'mixed') {
+                          const suggested = Number((discountedTotal * 0.5).toFixed(2));
+                          setMixedCashAmount(suggested);
+                          setMixedCashReceived(suggested);
+                        }
+                      }}
                       className={`py-2 px-3 rounded-lg font-medium text-sm transition-colors ${
                         paymentMethod === method
                           ? 'bg-brand-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {method === 'cash' ? '💵 Efectivo' : method === 'card' ? '💳 Tarjeta' : '📱 QR'}
+                      {method === 'cash' ? '💵 Efectivo' : method === 'card' ? '💳 Tarjeta' : '🔀 Mixto'}
                     </button>
                   ))}
                 </div>
@@ -543,6 +553,56 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 </div>
               )}
 
+              {paymentMethod === 'mixed' && (
+                <div className="space-y-3 bg-gray-50 rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-semibold text-gray-700">Pago dividido</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-600">Parte en efectivo</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={discountedTotal}
+                        step="0.01"
+                        value={mixedCashAmount}
+                        onChange={(e) => {
+                          const amount = Math.min(discountedTotal, Math.max(0, toAmount(e.target.value)));
+                          setMixedCashAmount(amount);
+                          setMixedCashReceived(amount);
+                        }}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Parte en tarjeta</label>
+                      <input
+                        type="number"
+                        value={mixedCardAmount}
+                        readOnly
+                        className="w-full border border-gray-200 bg-gray-100 rounded-lg px-3 py-2 text-sm text-gray-700"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Efectivo recibido</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={mixedCashReceived}
+                      onChange={(e) => setMixedCashReceived(Math.max(0, toAmount(e.target.value)))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+                  {mixedChange > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex justify-between">
+                      <span className="text-green-700 text-sm font-medium">Cambio (efectivo):</span>
+                      <span className="text-green-700 text-sm font-bold">{formatCurrency(mixedChange, settings)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Botones */}
               <div className="flex gap-2 pt-4">
                 <button
@@ -561,7 +621,11 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 </button>
                 <button
                   onClick={() => createInvoice.mutate()}
-                  disabled={createInvoice.isPending || (paymentMethod === 'cash' && cashReceived < discountedTotal)}
+                  disabled={
+                    createInvoice.isPending
+                    || (paymentMethod === 'cash' && cashReceived < discountedTotal)
+                    || (paymentMethod === 'mixed' && (mixedCashAmount <= 0 || mixedCashAmount >= discountedTotal || mixedCashReceived < mixedCashAmount))
+                  }
                   className="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
                   {createInvoice.isPending ? 'Procesando…' : 'Facturar'}
@@ -677,8 +741,17 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 <div>
                   <p className="text-gray-500 text-xs">Método de pago</p>
                   <p className="font-medium capitalize">
-                    {invoice?.paymentMethod === 'cash' ? '💵 Efectivo' : invoice?.paymentMethod === 'card' ? '💳 Tarjeta' : '📱 QR'}
+                    {invoice?.paymentMethod === 'cash'
+                      ? '💵 Efectivo'
+                      : invoice?.paymentMethod === 'card'
+                        ? '💳 Tarjeta'
+                        : '🔀 Mixto'}
                   </p>
+                  {invoice?.paymentMethod === 'mixed' && invoice?.paymentDetails && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Efectivo: {formatCurrency(toAmount(invoice.paymentDetails.cash), settings)} · Tarjeta: {formatCurrency(toAmount(invoice.paymentDetails.card), settings)}
+                    </p>
+                  )}
                 </div>
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex justify-between">
@@ -692,6 +765,35 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                     <span className="text-green-700 font-bold">{formatCurrency(toAmount(invoice.change), settings)}</span>
                   </div>
                 )}
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Enviar factura por correo</label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={invoiceEmail}
+                    onChange={(e) => setInvoiceEmail(e.target.value)}
+                    placeholder="cliente@correo.com"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <button
+                    onClick={() => sendInvoiceEmail.mutate()}
+                    disabled={sendInvoiceEmail.isPending || !invoiceEmail.trim()}
+                    className="px-3 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                  >
+                    {sendInvoiceEmail.isPending ? 'Enviando…' : 'Enviar'}
+                  </button>
+                </div>
+                {sendInvoiceEmail.isSuccess && (
+                  <p className="text-xs text-green-700">Factura enviada correctamente.</p>
+                )}
+                {sendInvoiceEmail.isError && (
+                  <p className="text-xs text-red-600">
+                    {(sendInvoiceEmail.error as any)?.response?.data?.message || 'No se pudo enviar la factura por correo'}
+                  </p>
+                )}
+                <p className="text-xs text-gray-500">Adjunto: factura en PDF tamaño carta.</p>
               </div>
 
               {/* Botones finales */}

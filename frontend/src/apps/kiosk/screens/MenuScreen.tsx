@@ -18,14 +18,15 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
   });
 
   const categories: { id: string; name: string }[] = menu?.categories ?? [];
-  const products: { id: string; name: string; price: number; imageUrl?: string; description?: string }[] = menu?.products ?? [];
+  const products: { id: string; name: string; price: number; taxRate?: number; imageUrl?: string; description?: string }[] = menu?.products ?? [];
 
   const filtered = activeCategoryId
     ? products.filter((p: any) => p.categoryId === activeCategoryId)
     : products;
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Total con IVA para mostrar al cliente
+  const cartTotal = cart.reduce((s, i) => s + i.price * (1 + i.taxRate / 100) * i.quantity, 0);
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-900">
@@ -79,20 +80,28 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
       </div>
 
       {/* Productos */}
-      <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-4">
-        {filtered.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => selectProduct(p.id)}
-            className="bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 hover:border-brand-500 rounded-2xl p-4 text-left transition-all"
-          >
-            {p.imageUrl
-              ? <img src={p.imageUrl} alt={p.name} className="w-full h-32 object-cover rounded-xl mb-3" />
-              : <div className="w-full h-32 bg-gray-700 rounded-xl mb-3 flex items-center justify-center text-5xl">🍽️</div>}
-            <p className="text-base font-semibold text-white line-clamp-2">{p.name}</p>
-            <p className="text-xl font-bold text-brand-400 mt-1">{formatCurrency(p.price, settings)}</p>
-          </button>
-        ))}
+      <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-3">
+        {filtered.map((p) => {
+          const salePrice = p.price * (1 + (p.taxRate ?? 0) / 100);
+          return (
+            <button
+              key={p.id}
+              onClick={() => selectProduct(p.id)}
+              className="aspect-square relative overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 hover:border-brand-500 active:scale-95 transition-all text-left"
+            >
+              {p.imageUrl ? (
+                <img src={p.imageUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-5xl bg-gray-800">🍽️</div>
+              )}
+              {/* Gradient overlay */}
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-8 pb-3 px-3">
+                <p className="text-sm font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
+                <p className="text-base font-bold text-brand-400 mt-0.5">{formatCurrency(salePrice, settings)}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

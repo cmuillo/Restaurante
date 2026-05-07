@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -281,7 +281,24 @@ export class HaciendaService {
   }
 
   /** Reenvío manual (para facturas en estado error/rejected) */
-  async resend(invoiceId: string): Promise<{ status: string }> {
+  async resend(invoiceId: string, branchId: string): Promise<{ status: string }> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['order'],
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Factura no encontrada');
+    }
+
+    if (invoice.order?.branchId !== branchId) {
+      throw new ForbiddenException('No tienes acceso a esta factura');
+    }
+
+    if (!['error', 'rejected'].includes(invoice.haciendaStatus ?? '')) {
+      throw new BadRequestException('Solo se puede reenviar una factura con estado error o rejected');
+    }
+
     await this.invoiceRepository.update(invoiceId, { haciendaStatus: 'pending' });
     this.sendInvoice(invoiceId).catch((e) =>
       this.logger.error(`Error en reenvío manual ${invoiceId}: ${e.message}`),
@@ -348,6 +365,8 @@ export class HaciendaService {
 
   /** Últimas facturas con estado Hacienda para la sucursal */
   async getRecentStatuses(branchId: string, limit = 50) {
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 200)) : 50;
+
     return this.invoiceRepository
       .createQueryBuilder('inv')
       .innerJoin('inv.order', 'ord')
@@ -366,7 +385,7 @@ export class HaciendaService {
         'inv.createdAt',
       ])
       .orderBy('inv.createdAt', 'DESC')
-      .limit(limit)
+      .limit(safeLimit)
       .getMany();
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ExpensesService } from './expenses.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,7 +7,7 @@ import { BranchScopeGuard } from '../auth/guards/branch-scope.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { CreateExpenseDto } from './dto/expense.dto';
+import { CreateExpenseDto, UpdateExpenseDto } from './dto/expense.dto';
 
 @ApiTags('Expenses')
 @ApiBearerAuth()
@@ -52,4 +52,27 @@ export class ExpensesController {
   ) {
     return this.expensesService.getSummaryByCategory(branchId, new Date(from), new Date(to));
   }
+
+  @Patch(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Actualizar gasto' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.expensesService.update(id, branchId, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar gasto' })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+  ) {
+    return this.expensesService.remove(id, branchId);
+  }
 }
+
