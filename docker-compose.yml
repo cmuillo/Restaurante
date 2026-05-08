@@ -80,6 +80,7 @@ services:
     environment:
       VITE_API_TARGET: http://backend:3000
       VITE_WS_TARGET: ws://backend:3000
+      BACKEND_URL: http://backend:3000
     ports:
       - '80:80'
 
