@@ -31,4 +31,4 @@ RUN npm config set strict-ssl false && npm install --omit=dev --ignore-scripts &
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
-CMD ["node", "dist/main"]
+CMD ["sh", "-c", "node dist/database/seeds/run-seeds.js && node dist/main"]
