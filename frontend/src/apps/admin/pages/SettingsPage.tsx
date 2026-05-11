@@ -34,15 +34,21 @@ const TIMEZONES = [
   { value: 'Europe/Madrid', label: 'España (UTC+1/+2)' },
 ];
 
-const TABS = [
+
+import { useAuthStore } from '../../../stores/auth.store';
+import { useBranchStore } from '../../../stores/branch.store';
+
+const BASE_TABS = [
   { id: 'empresa', label: 'Empresa', icon: '🏢' },
   { id: 'apariencia', label: 'Apariencia', icon: '🎨' },
+  { id: 'login', label: 'Login', icon: '🔐' },
   { id: 'moneda', label: 'Moneda y Fiscal', icon: '💰' },
   { id: 'kiosko', label: 'Kiosko', icon: '🖥️' },
   { id: 'regional', label: 'Regional', icon: '🌍' },
-] as const;
+];
 
-type TabId = typeof TABS[number]['id'];
+const EMAIL_TAB = { id: 'email', label: 'Facturas por correo', icon: '✉️' };
+type TabId = typeof BASE_TABS[number]['id'] | 'email';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 mt-6 first:mt-0">{children}</h3>;
@@ -61,12 +67,19 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
 const SELECT = INPUT;
 
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabId>('empresa');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const loginLogoInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuthStore();
+  const { activeBranchId } = useBranchStore();
+
+  // Tabs dinámicas
+  const TABS = user?.role === 'super_admin' ? [...BASE_TABS, EMAIL_TAB] : BASE_TABS;
 
   const { data: settings, isLoading } = useQuery<GlobalSettings>({
     queryKey: ['global-settings'],
@@ -83,6 +96,48 @@ export default function SettingsPage() {
     setSaved(false);
     setError('');
   };
+
+  // Configuración de correo IMAP (ingestión de facturas)
+  const { data: emailConfig, refetch: refetchEmailConfig } = useQuery({
+    queryKey: ['expense-email-config', activeBranchId],
+    queryFn: () => api.get('/expenses/email-config', { params: { branchId: activeBranchId } }).then(r => r.data),
+    enabled: user?.role === 'super_admin' && activeTab === 'email',
+  });
+  const [emailForm, setEmailForm] = useState<any>({});
+  
+  // Configuración de correo SMTP (envío de facturas/QR)
+  const { data: smtpConfig, refetch: refetchSmtpConfig } = useQuery({
+    queryKey: ['email-config'],
+    queryFn: () => api.get('/settings/email-config').then(r => r.data),
+    enabled: user?.role === 'super_admin' && activeTab === 'email',
+  });
+  const [smtpForm, setSmtpForm] = useState<any>({});
+  
+  const emailMutation = useMutation({
+    mutationFn: (data: any) => api.post('/expenses/email-config', data).then(r => r.data),
+    onSuccess: () => {
+      setSaved(true);
+      setError('');
+      refetchEmailConfig();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(' · ') : String(msg ?? 'Error al guardar'));
+    },
+  });
+  
+  const smtpMutation = useMutation({
+    mutationFn: (data: any) => api.patch('/settings/email-config', data).then(r => r.data),
+    onSuccess: () => {
+      setSaved(true);
+      setError('');
+      refetchSmtpConfig();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(' · ') : String(msg ?? 'Error al guardar'));
+    },
+  });
 
   const saveMutation = useMutation({
     mutationFn: (data: Partial<GlobalSettings>) => api.patch('/settings', data).then((r) => r.data),
@@ -116,6 +171,18 @@ export default function SettingsPage() {
     update('tipSuggestions', nums);
   };
 
+  const handleLoginLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError('El logo de login no puede superar 2 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => update('loginLogoBase64', reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-64 text-gray-400">Cargando configuración...</div>;
   }
@@ -125,7 +192,7 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Personalización global</h2>
-          <p className="text-sm text-gray-500 mt-1">Configuración general del sistema — aplica a Admin, Kiosko y Facturas</p>
+          <p className="text-sm text-gray-500 mt-1">Configuración general del sistema — aplica a Admin, Login, Kiosko y Facturas</p>
         </div>
         <div className="flex items-center gap-3">
           {saved && <span className="text-sm text-emerald-600 font-medium">✓ Guardado</span>}
@@ -148,7 +215,7 @@ export default function SettingsPage() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => setActiveTab(tab.id as TabId)}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === tab.id
                 ? 'bg-white text-gray-900 shadow-sm'
@@ -162,6 +229,217 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-2xl p-6">
+
+        {/* ── FACTURAS POR CORREO ───────────────────────────────────────────── */}
+        {activeTab === 'email' && user?.role === 'super_admin' && (
+          <div>
+            <SectionTitle>Configuración de correo para ingestión de facturas</SectionTitle>
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+              <strong>¿Cómo funciona?</strong> El sistema puede leer automáticamente un buzón de correo (por ejemplo, Gmail) y extraer los archivos XML de facturas para su revisión y aprobación. <br />
+              <span className="text-xs text-blue-600">Solo visible para super administradores.</span>
+            </div>
+            <form
+              className="space-y-4 max-w-lg"
+              onSubmit={e => {
+                e.preventDefault();
+                emailMutation.mutate({ ...emailConfig, ...emailForm, branchId: activeBranchId });
+              }}
+            >
+              <Field label="Correo electrónico (usuario)">
+                <input
+                  className={INPUT}
+                  type="email"
+                  value={emailForm.email ?? emailConfig?.email ?? ''}
+                  onChange={e => setEmailForm((f: any) => ({ ...f, email: e.target.value }))}
+                  required
+                />
+              </Field>
+              <Field label="Contraseña o app password">
+                <input
+                  className={INPUT}
+                  type="password"
+                  value={emailForm.password ?? emailConfig?.password ?? ''}
+                  onChange={e => setEmailForm((f: any) => ({ ...f, password: e.target.value }))}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Para Gmail, se recomienda usar una <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline">contraseña de aplicación</a>.</p>
+              </Field>
+              <Field label="Servidor IMAP">
+                <input
+                  className={INPUT}
+                  value={emailForm.imapHost ?? emailConfig?.imapHost ?? 'imap.gmail.com'}
+                  onChange={e => setEmailForm((f: any) => ({ ...f, imapHost: e.target.value }))}
+                  required
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Puerto">
+                  <input
+                    className={INPUT}
+                    type="number"
+                    value={emailForm.imapPort ?? emailConfig?.imapPort ?? 993}
+                    onChange={e => setEmailForm((f: any) => ({ ...f, imapPort: Number(e.target.value) }))}
+                    required
+                  />
+                </Field>
+                <Field label="SSL/TLS">
+                  <select
+                    className={SELECT}
+                    value={emailForm.imapSecure ?? emailConfig?.imapSecure ?? true}
+                    onChange={e => setEmailForm((f: any) => ({ ...f, imapSecure: e.target.value === 'true' }))}
+                  >
+                    <option value="true">Sí (recomendado)</option>
+                    <option value="false">No</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Carpeta (opcional)" hint="Por ejemplo: INBOX, Facturas, etc.">
+                <input
+                  className={INPUT}
+                  value={emailForm.folder ?? emailConfig?.folder ?? ''}
+                  onChange={e => setEmailForm((f: any) => ({ ...f, folder: e.target.value }))}
+                />
+              </Field>
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50"
+                  disabled={emailMutation.isPending}
+                >
+                  {emailMutation.isPending ? 'Guardando...' : 'Guardar configuración'}
+                </button>
+                {saved && <span className="text-sm text-emerald-600 font-medium">✓ Guardado</span>}
+              </div>
+              {error && <div className="mt-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">{error}</div>}
+            </form>
+            <div className="mt-6 text-xs text-gray-500">
+              <strong>Nota:</strong> La contraseña se almacena cifrada en la base de datos. El sistema solo usará estos datos para leer facturas y nunca enviará correos ni compartirá tus credenciales.<br />
+              <span className="text-amber-600">Asegúrate de usar una cuenta dedicada o una contraseña de aplicación para mayor seguridad.</span>
+            </div>
+
+            {/* ── SMTP para envío de facturas/QR ───────────────────────────────────────── */}
+            <div className="mt-8">
+              <SectionTitle>Configuración SMTP para envío de correos</SectionTitle>
+            </div>
+            <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">
+              <strong>¿Cómo funciona?</strong> El sistema puede enviar automáticamente facturas, códigos QR y otros documentos por correo a clientes usando tu servidor SMTP. <br />
+              <span className="text-xs text-green-600">Configura aquí los datos de tu servidor de correo (Gmail, Outlook, tu propio servidor, etc.).</span>
+            </div>
+            <form
+              className="space-y-4 max-w-lg"
+              onSubmit={e => {
+                e.preventDefault();
+                smtpMutation.mutate({ ...smtpConfig, ...smtpForm });
+              }}
+            >
+              <div className="flex items-center">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smtpForm.isEnabled ?? smtpConfig?.isEnabled ?? false}
+                    onChange={e => setSmtpForm((f: any) => ({ ...f, isEnabled: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Habilitar envío de correos</span>
+                </label>
+              </div>
+
+              {(smtpForm.isEnabled ?? smtpConfig?.isEnabled) && (
+                <>
+                  <Field label="Servidor SMTP">
+                    <input
+                      className={INPUT}
+                      type="text"
+                      placeholder="smtp.gmail.com"
+                      value={smtpForm.smtpHost ?? smtpConfig?.smtpHost ?? ''}
+                      onChange={e => setSmtpForm((f: any) => ({ ...f, smtpHost: e.target.value }))}
+                      required
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Puerto">
+                      <input
+                        className={INPUT}
+                        type="number"
+                        placeholder="587"
+                        value={smtpForm.smtpPort ?? smtpConfig?.smtpPort ?? 587}
+                        onChange={e => setSmtpForm((f: any) => ({ ...f, smtpPort: Number(e.target.value) }))}
+                        required
+                      />
+                    </Field>
+                    <Field label="SSL/TLS">
+                      <select
+                        className={SELECT}
+                        value={(smtpForm.smtpSecure ?? smtpConfig?.smtpSecure ?? false).toString()}
+                        onChange={e => setSmtpForm((f: any) => ({ ...f, smtpSecure: e.target.value === 'true' }))}
+                      >
+                        <option value="false">No (puerto 587)</option>
+                        <option value="true">Sí (puerto 465)</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Usuario/Email">
+                    <input
+                      className={INPUT}
+                      type="email"
+                      placeholder="tu-email@gmail.com"
+                      value={smtpForm.smtpUser ?? smtpConfig?.smtpUser ?? ''}
+                      onChange={e => setSmtpForm((f: any) => ({ ...f, smtpUser: e.target.value }))}
+                      required
+                    />
+                  </Field>
+                  <Field label="Contraseña">
+                    <input
+                      className={INPUT}
+                      type="password"
+                      placeholder="Contraseña o app password"
+                      value={smtpForm.smtpPassword ?? smtpConfig?.smtpPassword ?? ''}
+                      onChange={e => setSmtpForm((f: any) => ({ ...f, smtpPassword: e.target.value }))}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Para Gmail, se recomienda usar una <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline">contraseña de aplicación</a>.</p>
+                  </Field>
+                  <Field label="Email del remitente">
+                    <input
+                      className={INPUT}
+                      type="email"
+                      placeholder="sistema@restaurante.com"
+                      value={smtpForm.senderEmail ?? smtpConfig?.senderEmail ?? ''}
+                      onChange={e => setSmtpForm((f: any) => ({ ...f, senderEmail: e.target.value }))}
+                      required
+                    />
+                  </Field>
+                  <Field label="Nombre del remitente">
+                    <input
+                      className={INPUT}
+                      type="text"
+                      placeholder="Mi Restaurante"
+                      value={smtpForm.senderName ?? smtpConfig?.senderName ?? ''}
+                      onChange={e => setSmtpForm((f: any) => ({ ...f, senderName: e.target.value }))}
+                      required
+                    />
+                  </Field>
+                </>
+              )}
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  disabled={smtpMutation.isPending}
+                >
+                  {smtpMutation.isPending ? 'Guardando...' : 'Guardar configuración SMTP'}
+                </button>
+                {saved && smtpMutation.isSuccess && <span className="text-sm text-emerald-600 font-medium">✓ Guardado</span>}
+              </div>
+              {error && smtpMutation.isError && <div className="mt-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-700">{error}</div>}
+            </form>
+            <div className="mt-4 text-xs text-gray-500">
+              <strong>Seguridad:</strong> La contraseña se almacena cifrada en la base de datos. El sistema solo la usará para enviar correos automáticos (facturas, códigos QR, etc.). <br />
+              <span className="text-amber-600">Se recomienda usar una cuenta dedicada o una contraseña de aplicación para mayor seguridad.</span>
+            </div>
+          </div>
+        )}
 
         {/* ── EMPRESA ─────────────────────────────────────────────────────── */}
         {activeTab === 'empresa' && (
@@ -302,6 +580,102 @@ export default function SettingsPage() {
                 placeholder="¡Gracias por su preferencia! Vuelva pronto."
               />
             </Field>
+          </div>
+        )}
+
+        {/* ── LOGIN ───────────────────────────────────────────────────────── */}
+        {activeTab === 'login' && (
+          <div>
+            <SectionTitle>Pantalla de inicio de sesión</SectionTitle>
+
+            <Field label="Logo del login" hint="Si no define uno, se usa el logo principal de Empresa.">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+                  {(current.loginLogoBase64 ?? current.logoBase64)
+                    ? <img src={current.loginLogoBase64 ?? current.logoBase64 ?? ''} alt="Logo Login" className="w-full h-full object-contain" />
+                    : <span className="text-3xl">🍴</span>
+                  }
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => loginLogoInputRef.current?.click()}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Subir logo de login
+                  </button>
+                  {current.loginLogoBase64 && (
+                    <button
+                      onClick={() => update('loginLogoBase64', null)}
+                      className="px-3 py-1.5 text-sm text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors"
+                    >
+                      Usar logo principal
+                    </button>
+                  )}
+                </div>
+                <input ref={loginLogoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLoginLogoChange} />
+              </div>
+            </Field>
+
+            <SectionTitle>Fondo con degradado</SectionTitle>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Color inicial">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={current.loginBackgroundColor ?? '#EA580C'}
+                    onChange={(e) => update('loginBackgroundColor', e.target.value)}
+                    className="w-12 h-10 rounded border border-gray-300 cursor-pointer p-0.5"
+                  />
+                  <input
+                    className={INPUT}
+                    value={current.loginBackgroundColor ?? '#EA580C'}
+                    onChange={(e) => update('loginBackgroundColor', e.target.value)}
+                    placeholder="#EA580C"
+                  />
+                </div>
+              </Field>
+
+              <Field label="Color final">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={current.loginBackgroundColorDark ?? '#C2410C'}
+                    onChange={(e) => update('loginBackgroundColorDark', e.target.value)}
+                    className="w-12 h-10 rounded border border-gray-300 cursor-pointer p-0.5"
+                  />
+                  <input
+                    className={INPUT}
+                    value={current.loginBackgroundColorDark ?? '#C2410C'}
+                    onChange={(e) => update('loginBackgroundColorDark', e.target.value)}
+                    placeholder="#C2410C"
+                  />
+                </div>
+              </Field>
+            </div>
+
+            <SectionTitle>Vista previa</SectionTitle>
+            <div
+              className="rounded-xl overflow-hidden aspect-video flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg, ${current.loginBackgroundColor ?? '#EA580C'}, ${current.loginBackgroundColorDark ?? '#C2410C'})`,
+              }}
+            >
+              <div className="bg-white/95 rounded-2xl shadow-lg p-6 w-full max-w-sm mx-4">
+                <div className="text-center mb-5">
+                  {(current.loginLogoBase64 ?? current.logoBase64)
+                    ? <img src={current.loginLogoBase64 ?? current.logoBase64 ?? ''} alt={current.restaurantName} className="h-12 object-contain mx-auto mb-2" />
+                    : <span className="text-3xl">🍴</span>
+                  }
+                  <p className="text-sm text-gray-500 mt-2">Panel de Administración</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-9 rounded-lg bg-gray-100" />
+                  <div className="h-9 rounded-lg bg-gray-100" />
+                  <div className="h-9 rounded-lg bg-brand-600/90" />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -495,7 +869,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Botón guardar inferior */}
-      {Object.keys(form).length > 0 && (
+      {activeTab !== 'email' && Object.keys(form).length > 0 && (
         <div className="mt-4 flex justify-end">
           <button
             onClick={() => saveMutation.mutate(form)}

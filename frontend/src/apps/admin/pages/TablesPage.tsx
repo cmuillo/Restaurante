@@ -6,11 +6,11 @@ import { useState } from 'react';
 import { parseApiFormErrors } from '../../../lib/formErrors';
 
 const STATUS_COLORS: Record<string, string> = {
-  FREE: 'bg-green-100 text-green-700',
-  OCCUPIED: 'bg-red-100 text-red-700',
-  WAITING_FOOD: 'bg-yellow-100 text-yellow-700',
-  BILL_REQUESTED: 'bg-orange-100 text-orange-700',
-  RESERVED: 'bg-blue-100 text-blue-700',
+  FREE: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  OCCUPIED: 'bg-red-100 text-red-700 border-red-200',
+  WAITING_FOOD: 'bg-amber-100 text-amber-700 border-amber-200',
+  BILL_REQUESTED: 'bg-orange-100 text-orange-700 border-orange-200',
+  RESERVED: 'bg-blue-100 text-blue-700 border-blue-200',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -44,6 +44,12 @@ export default function TablesPage() {
   const [form, setForm] = useState({ number: '', name: '', capacity: '4' });
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ type: 'error' | 'success'; message: string } | null>(null);
+
+  const showToast = (type: 'error' | 'success', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const { data: tables = [] } = useQuery({
     queryKey: ['tables', branchId],
@@ -55,15 +61,25 @@ export default function TablesPage() {
   useSocket({
     branchId,
     events: {
-      'order:status_updated': () => qc.invalidateQueries({ queryKey: ['tables'] }),
+      'order:status_updated': () => qc.invalidateQueries({ queryKey: ['tables', branchId] }),
+      'table:updated': () => qc.invalidateQueries({ queryKey: ['tables', branchId] }),
     },
     enabled: !!branchId,
   });
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/tables/${id}/status?branchId=${branchId}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tables'] }),
+      api.patch(
+        `/tables/${id}/status?branchId=${branchId}`,
+        { status },
+        { headers: { 'X-Silent-Error': '1' } },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tables', branchId] }),
+    onError: (error: any) => {
+      const parsed = parseApiFormErrors(error);
+      const msg = parsed.global || 'No se pudo cambiar el estado de la mesa. Verifica que el estado sea válido.';
+      showToast('error', msg);
+    },
   });
 
   const saveTable = useMutation({
@@ -72,7 +88,7 @@ export default function TablesPage() {
         ? api.patch(`/tables/${editTable.id}?branchId=${branchId}`, data, { headers: { 'X-Silent-Error': '1' } })
         : api.post(`/tables?branchId=${branchId}`, data, { headers: { 'X-Silent-Error': '1' } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tables'] });
+      qc.invalidateQueries({ queryKey: ['tables', branchId] });
       setShowModal(false);
       setFormError('');
       setFieldErrors({});
@@ -85,8 +101,12 @@ export default function TablesPage() {
   });
 
   const deleteTable = useMutation({
-    mutationFn: (id: string) => api.delete(`/tables/${id}?branchId=${branchId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tables'] }),
+    mutationFn: (id: string) => api.delete(`/tables/${id}?branchId=${branchId}`, { headers: { 'X-Silent-Error': '1' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tables', branchId] }),
+    onError: (error: any) => {
+      const parsed = parseApiFormErrors(error);
+      showToast('error', parsed.global || 'No se pudo eliminar la mesa.');
+    },
   });
 
   function openNew() {
@@ -105,6 +125,20 @@ export default function TablesPage() {
   }
   return (
     <div>
+      {toast && (
+        <div className="fixed top-4 right-4 z-[60] max-w-sm">
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
+              toast.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Mesas</h2>
         <button onClick={openNew} className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors">+ Nueva mesa</button>
@@ -118,44 +152,80 @@ export default function TablesPage() {
         </div>
       ) : (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {(tables as Table[]).map((t) => (
+        {(tables as Table[]).map((t) => {
+          const status = String(t.status ?? '').toUpperCase();
+          return (
           <div
             key={t.id}
-            className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+            className="bg-white rounded-xl border-2 border-gray-200 p-4 hover:shadow-lg transition-shadow cursor-pointer"
           >
-            <div className="flex items-center justify-between mb-2 gap-1">
+            <div className="flex items-center justify-between mb-3 gap-2">
               <div>
-                <p className="text-lg font-bold text-gray-900">Mesa {t.number}</p>
-                {t.name && <p className="text-xs text-gray-500">{t.name}</p>}
+                <p className="text-lg font-bold text-gray-900">🪑 Mesa {t.number}</p>
+                {t.name && <p className="text-xs text-gray-500 font-medium">{t.name}</p>}
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs">👥 {t.capacity}</span>
-                <button onClick={() => openEdit(t)} className="text-gray-300 hover:text-brand-500 text-xs p-0.5">✏️</button>
-                <button onClick={() => { if (confirm(`¿Eliminar mesa ${t.number}?`)) deleteTable.mutate(t.id); }} className="text-gray-300 hover:text-red-500 text-xs p-0.5">🗑</button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-1 rounded-full">👥 {t.capacity}</span>
+                <button onClick={() => openEdit(t)} className="text-gray-300 hover:text-brand-500 text-lg p-0.5 transition-colors">✏️</button>
+                <button onClick={() => { if (confirm(`¿Eliminar mesa ${t.number}?`)) deleteTable.mutate(t.id); }} className="text-gray-300 hover:text-red-500 text-lg p-0.5 transition-colors">🗑</button>
               </div>
             </div>
-            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[t.status] ?? 'bg-gray-100 text-gray-500'}`}>
-              {STATUS_LABELS[t.status] ?? t.status}
-            </span>
+            <div className="mb-3">
+              <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-bold border ${STATUS_COLORS[status] ?? 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                {status === 'FREE' && '✓ '}
+                {status === 'OCCUPIED' && '👥 '}
+                {status === 'WAITING_FOOD' && '⏱️ '}
+                {status === 'BILL_REQUESTED' && '💳 '}
+                {status === 'RESERVED' && '📌 '}
+                {STATUS_LABELS[status] ?? t.status}
+              </span>
+            </div>
 
-            {t.status === 'OCCUPIED' && (
-              <button
-                className="mt-3 w-full text-xs py-1 border border-orange-300 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors"
-                onClick={() => updateStatus.mutate({ id: t.id, status: 'BILL_REQUESTED' })}
-              >
-                Pedir cuenta
-              </button>
-            )}
-            {(t.status === 'BILL_REQUESTED' || t.status === 'WAITING_FOOD') && (
-              <button
-                className="mt-3 w-full text-xs py-1 border border-green-300 text-green-600 rounded-lg hover:bg-green-50 transition-colors"
-                onClick={() => updateStatus.mutate({ id: t.id, status: 'FREE' })}
-              >
-                Liberar mesa
-              </button>
-            )}
+            <div className="space-y-2">
+              {status === 'FREE' && (
+                <button
+                  className="w-full text-xs py-2 border-2 border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
+                  onClick={() => updateStatus.mutate({ id: t.id, status: 'reserved' })}
+                >
+                  📌 Reservar
+                </button>
+              )}
+              {status === 'OCCUPIED' && (
+                <button
+                  className="w-full text-xs py-2 border-2 border-orange-300 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors font-semibold"
+                  onClick={() => updateStatus.mutate({ id: t.id, status: 'bill_requested' })}
+                >
+                  💳 Pedir cuenta
+                </button>
+              )}
+              {(status === 'BILL_REQUESTED' || status === 'WAITING_FOOD') && (
+                <button
+                  className="w-full text-xs py-2 border-2 border-emerald-300 text-emerald-600 rounded-lg hover:bg-emerald-50 transition-colors font-semibold"
+                  onClick={() => updateStatus.mutate({ id: t.id, status: 'free' })}
+                >
+                  ✓ Liberar mesa
+                </button>
+              )}
+              {status === 'RESERVED' && (
+                <>
+                  <button
+                    className="w-full text-xs py-2 border-2 border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-semibold"
+                    onClick={() => updateStatus.mutate({ id: t.id, status: 'occupied' })}
+                  >
+                    👥 Ocupar
+                  </button>
+                  <button
+                    className="w-full text-xs py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors text-xs"
+                    onClick={() => updateStatus.mutate({ id: t.id, status: 'free' })}
+                  >
+                    Cancelar reserva
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
         )}
 

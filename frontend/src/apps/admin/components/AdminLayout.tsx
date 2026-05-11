@@ -30,6 +30,14 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isSuperAdmin = user?.role === 'super_admin';
+  const isAdminRole = user?.role === 'super_admin' || user?.role === 'branch_admin';
+
+  const selectedBranchQs = isSuperAdmin && activeBranchId ? `?branchId=${activeBranchId}` : '';
+  const moduleLinks = [
+    { href: `/pos/${selectedBranchQs}`, label: 'POS' },
+    { href: `/kitchen/${selectedBranchQs}`, label: 'Kitchen' },
+    { href: `/kiosk/${selectedBranchQs}`, label: 'Kiosko' },
+  ];
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ['branches'],
@@ -47,7 +55,7 @@ export default function AdminLayout() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -118,7 +126,7 @@ export default function AdminLayout() {
       {/* Main content */}
       <main className="flex-1 overflow-auto">
         <div className="p-4 lg:p-6">
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <button
               onClick={() => setSidebarOpen((v) => !v)}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50"
@@ -126,6 +134,23 @@ export default function AdminLayout() {
               <span>{sidebarOpen ? '◀' : '▶'}</span>
               {sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'}
             </button>
+
+            {isAdminRole && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Módulos</span>
+                {moduleLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
           <Outlet />
         </div>

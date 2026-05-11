@@ -14,6 +14,9 @@ export interface GlobalSettings {
   currencyLocale: string;
   theme: 'light' | 'dark';
   brandColor: string;
+  loginLogoBase64: string | null;
+  loginBackgroundColor: string;
+  loginBackgroundColorDark: string;
   defaultTaxRate: number;
   tipSuggestions: number[];
   invoiceFooterMessage: string | null;
@@ -40,6 +43,9 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   currencyLocale: 'es-CR',
   theme: 'light',
   brandColor: '#ea580c',
+  loginLogoBase64: null,
+  loginBackgroundColor: '#EA580C',
+  loginBackgroundColorDark: '#C2410C',
   defaultTaxRate: 13,
   tipSuggestions: [10, 15, 18],
   invoiceFooterMessage: null,

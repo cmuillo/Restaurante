@@ -27,6 +27,11 @@ interface Order {
   items: OrderItem[];
 }
 
+interface Branch {
+  id: string;
+  name: string;
+}
+
 function sourceLabel(order: Order): string {
   const type = String(order.type || '').toLowerCase();
   if (type === 'kiosk') return 'Kiosko';
@@ -357,8 +362,39 @@ function ReadyCard({ order, onPrint }: { order: Order; onPrint: (order: Order) =
 export default function App() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
-  const branchId = user?.branchId ?? '';
+  const isSuperAdmin = user?.role === 'super_admin';
+  const initialQueryBranchId = new URLSearchParams(window.location.search).get('branchId') ?? '';
+  const [selectedBranchId, setSelectedBranchId] = useState(initialQueryBranchId);
+  const branchId = isSuperAdmin ? (selectedBranchId || user?.branchId || '') : (user?.branchId ?? '');
   const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ['kitchen-branches'],
+    queryFn: () => api.get('/branches').then((r) => r.data),
+    enabled: isSuperAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => {
+    if (!isSuperAdmin || selectedBranchId) return;
+    if (user?.branchId) {
+      setSelectedBranchId(user.branchId);
+      return;
+    }
+    if (branches.length > 0) {
+      setSelectedBranchId(branches[0].id);
+    }
+  }, [isSuperAdmin, selectedBranchId, user?.branchId, branches]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const params = new URLSearchParams(window.location.search);
+    if (branchId) params.set('branchId', branchId);
+    else params.delete('branchId');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [isSuperAdmin, branchId]);
 
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ['kitchen-orders', branchId],
@@ -469,6 +505,21 @@ export default function App() {
           <h1 className="text-3xl font-black tracking-tight">🍳 Cocina — KDS</h1>
           <p className="text-sm text-slate-400 mt-1">Control de preparación, ticket de mostrador y pila de pedidos listos del día</p>
         </div>
+        {isSuperAdmin && (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 min-w-[220px]">
+            <label className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">Sucursal activa</label>
+            <select
+              value={branchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="w-full h-9 rounded-lg border border-slate-600 bg-slate-800 px-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
+            >
+              <option value="">Seleccionar...</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex flex-wrap gap-3 text-sm">
           <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
             <div className="text-slate-400 text-xs uppercase tracking-wide">Activas</div>

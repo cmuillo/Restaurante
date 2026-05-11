@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import PDFDocument = require('pdfkit');
 import * as nodemailer from 'nodemailer';
 import { Invoice, InvoiceStatus, PaymentMethod } from './entities/invoice.entity';
@@ -12,6 +12,8 @@ import { HaciendaService } from '../hacienda/hacienda.service';
 import { CustomersService } from '../customers/customers.service';
 import { Customer } from '../customers/entities/customer.entity';
 import { Product } from '../menu/entities/product.entity';
+import { Table, TableStatus } from '../tables/entities/table.entity';
+import { RestaurantGateway } from '../websockets/restaurant.gateway';
 
 @Injectable()
 export class BillingService {
@@ -26,6 +28,7 @@ export class BillingService {
     private readonly auditService: AuditService,
     private readonly haciendaService: HaciendaService,
     private readonly customersService: CustomersService,
+    private readonly gateway: RestaurantGateway,
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<any> {
@@ -160,6 +163,27 @@ export class BillingService {
         status: OrderStatus.COMPLETED,
         completedAt: new Date(),
       });
+
+      if (order.tableId && order.type === 'dine_in') {
+        const activeOrdersOnTable = await manager.count(Order, {
+          where: {
+            branchId: order.branchId,
+            tableId: order.tableId,
+            type: order.type,
+            status: In([
+              OrderStatus.PENDING,
+              OrderStatus.IN_PREPARATION,
+              OrderStatus.READY,
+              OrderStatus.DELIVERED,
+            ]),
+          },
+        });
+
+        if (activeOrdersOnTable === 0) {
+          await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.FREE });
+          this.gateway.emitTableUpdated(order.branchId, { id: order.tableId, status: TableStatus.FREE });
+        }
+      }
 
       await this.auditService.log({
         branchId: order.branchId,

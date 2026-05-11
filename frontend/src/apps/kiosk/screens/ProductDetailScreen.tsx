@@ -15,7 +15,7 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
 
   const { data: menu } = useQuery({
     queryKey: ['kiosk-menu', branchId],
-    queryFn: () => api.get(`/kiosk/menu?branchId=${branchId}`).then((r) => r.data),
+    queryFn: () => api.get(`/kiosk/${branchId}/menu`).then((r) => r.data),
     enabled: !!branchId,
   });
 

@@ -10,10 +10,16 @@ export class UpdateHaciendaConfigDto {
   @IsIn(['01', '02', '03', '04'])
   haciendaTaxIdType?: string;
 
-  /** Número de cédula/RUC sin guiones (máximo 12 dígitos) */
+  /** Cédula/RUC alfanumérica - Hacienda 4.4 compliance
+   * Jurídica: 3-101-999999 (acepta solo números)
+   * Física: X-XXXX-XXXX (acepta solo números)
+   * DIMEX: acepta alfanuméricos
+   * NITE: acepta alfanuméricos
+   * Se guarda sin guiones, máximo 50 caracteres
+   */
   @IsOptional()
   @IsString()
-  @Matches(/^\d{9,12}$/, { message: 'haciendaTaxId debe tener entre 9 y 12 dígitos' })
+  @Matches(/^[A-Z0-9\-]{6,50}$/i, { message: 'haciendaTaxId debe ser alfanumérico válido (Hacienda 4.4)' })
   haciendaTaxId?: string;
 
   @IsOptional()

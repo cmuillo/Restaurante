@@ -5,6 +5,15 @@ const api = axios.create({
   withCredentials: false,
 });
 
+function resolveLoginRoute(): string {
+  const path = window.location.pathname;
+  const moduleMatch = path.match(/^\/(admin|pos|kitchen|kiosk)(?:\/|$)/i);
+  if (moduleMatch?.[1]) {
+    return `/${moduleMatch[1].toLowerCase()}/login`;
+  }
+  return '/admin/login';
+}
+
 function prettifyField(field: string): string {
   const map: Record<string, string> = {
     name: 'nombre',
@@ -99,7 +108,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (!refreshToken) {
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.href = resolveLoginRoute();
         return Promise.reject(error);
       }
       try {
@@ -109,7 +118,7 @@ api.interceptors.response.use(
         return api(original);
       } catch {
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.href = resolveLoginRoute();
         return Promise.reject(error);
       }
     }

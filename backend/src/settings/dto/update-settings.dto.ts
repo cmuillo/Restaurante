@@ -51,6 +51,16 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() @MaxLength(20)
   brandColor?: string;
 
+  /** Base64 data-URL del logo del login. Enviar null para restaurar logo principal. */
+  @IsOptional() @IsString() @MaxLength(3_000_000)
+  loginLogoBase64?: string | null;
+
+  @IsOptional() @IsString() @MaxLength(20)
+  loginBackgroundColor?: string;
+
+  @IsOptional() @IsString() @MaxLength(20)
+  loginBackgroundColorDark?: string;
+
   @IsOptional() @IsNumber() @Min(0) @Max(100) @Type(() => Number)
   defaultTaxRate?: number;
 

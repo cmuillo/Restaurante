@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
+import { useSettings } from '../../../hooks/useSettings';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuthStore();
+  const settings = useSettings();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,11 +27,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background: `linear-gradient(135deg, ${settings.loginBackgroundColor ?? '#EA580C'}, ${settings.loginBackgroundColorDark ?? '#C2410C'})`,
+      }}
+    >
+      <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-8 w-full max-w-sm border border-white/30">
         <div className="text-center mb-8">
-          <span className="text-5xl">🍴</span>
-          <h1 className="text-2xl font-bold text-gray-900 mt-3">Restaurante</h1>
+          {(settings.loginLogoBase64 ?? settings.logoBase64)
+            ? <img src={settings.loginLogoBase64 ?? settings.logoBase64 ?? ''} alt={settings.restaurantName} className="h-16 object-contain mx-auto" />
+            : <span className="text-5xl">🍴</span>
+          }
+          <h1 className="text-2xl font-bold text-gray-900 mt-3">{settings.restaurantName || 'Restaurante'}</h1>
           <p className="text-sm text-gray-500 mt-1">Panel de Administración</p>
         </div>
 

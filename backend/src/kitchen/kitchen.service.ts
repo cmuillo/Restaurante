@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { Table, TableStatus } from '../tables/entities/table.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { AuditService } from '../audit/audit.service';
 
@@ -9,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 export class KitchenService {
   constructor(
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
+    private readonly dataSource: DataSource,
     private readonly gateway: RestaurantGateway,
     private readonly auditService: AuditService,
   ) {}
@@ -55,7 +57,20 @@ export class KitchenService {
     }
 
     const preparationStartedAt = new Date();
-    await this.orderRepository.update(id, { preparationStartedAt });
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Order, { id, branchId }, {
+        preparationStartedAt,
+        status: OrderStatus.IN_PREPARATION,
+      });
+
+      if (order.tableId) {
+        await manager.update(Table, { id: order.tableId, branchId }, { status: TableStatus.WAITING_FOOD });
+      }
+    });
+
+    if (order.tableId) {
+      this.gateway.emitTableUpdated(branchId, { id: order.tableId, status: TableStatus.WAITING_FOOD });
+    }
 
     this.gateway.emitOrderStatusUpdate(branchId, {
       id,
@@ -84,10 +99,21 @@ export class KitchenService {
     }
 
     const now = new Date();
-    await this.orderRepository.update(id, {
-      preparationStartedAt: order.preparationStartedAt ?? now,
-      readyAt: now,
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Order, { id, branchId }, {
+        status: OrderStatus.READY,
+        preparationStartedAt: order.preparationStartedAt ?? now,
+        readyAt: now,
+      });
+
+      if (order.tableId) {
+        await manager.update(Table, { id: order.tableId, branchId }, { status: TableStatus.OCCUPIED });
+      }
     });
+
+    if (order.tableId) {
+      this.gateway.emitTableUpdated(branchId, { id: order.tableId, status: TableStatus.OCCUPIED });
+    }
 
     this.gateway.emitOrderReady(branchId, { id, orderNumber: order.orderNumber, readyAt: now });
     this.gateway.emitOrderStatusUpdate(branchId, { id, kitchenState: 'ready', readyAt: now });

@@ -1,14 +1,50 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Expense, PaymentMethodExpense } from './entities/expense.entity';
-import { CreateExpenseDto, UpdateExpenseDto } from './dto/expense.dto';
+import { CreateExpenseDto, ExpenseCategory, UpdateExpenseDto } from './dto/expense.dto';
+import { ExpenseInboxItem, ExpenseInboxStatus } from './entities/expense-inbox-item.entity';
+import { ApproveExpenseInboxItemDto } from './dto/expense-inbox.dto';
+import { UserRole } from '../users/entities/user.entity';
+import { ExpenseEmailConfig } from './entities/expense-email-config.entity';
 
 @Injectable()
 export class ExpensesService {
   constructor(
     @InjectRepository(Expense) private readonly expenseRepository: Repository<Expense>,
+    @InjectRepository(ExpenseInboxItem) private readonly inboxRepository: Repository<ExpenseInboxItem>,
+    @InjectRepository(ExpenseEmailConfig) private readonly emailConfigRepository: Repository<ExpenseEmailConfig>,
   ) {}
+
+  // Configuración de correo para ingestión de facturas
+  async getEmailConfig(branchId?: string): Promise<ExpenseEmailConfig | null> {
+    if (branchId) {
+      const config = await this.emailConfigRepository.findOne({ where: { branchId } });
+      if (config) return config;
+    }
+    // Si no hay config por sucursal, buscar global
+    return this.emailConfigRepository.findOne({ where: { branchId: IsNull() } });
+  }
+
+  async setEmailConfig(data: Partial<ExpenseEmailConfig>): Promise<ExpenseEmailConfig> {
+    let config: ExpenseEmailConfig | null = null;
+    if (data.id) {
+      config = await this.emailConfigRepository.findOne({ where: { id: data.id } });
+    } else if (data.branchId) {
+      config = await this.emailConfigRepository.findOne({ where: { branchId: data.branchId } });
+    }
+    if (config) {
+      Object.assign(config, data);
+      return this.emailConfigRepository.save(config);
+    } else {
+      const newConfig = this.emailConfigRepository.create(data);
+      return this.emailConfigRepository.save(newConfig);
+    }
+  }
+
+  private toDateInput(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
 
   create(branchId: string, dto: CreateExpenseDto, userId?: string): Promise<Expense> {
     const expense = this.expenseRepository.create({
@@ -30,11 +66,16 @@ export class ExpensesService {
     return this.expenseRepository.save(expense) as Promise<Expense>;
   }
 
-  findAll(branchId: string, from?: Date, to?: Date): Promise<Expense[]> {
+  findAll(branchId?: string, from?: Date, to?: Date): Promise<Expense[]> {
     const query = this.expenseRepository
       .createQueryBuilder('exp')
-      .where('exp.branchId = :branchId', { branchId })
+      .leftJoinAndSelect('exp.branch', 'branch')
       .orderBy('exp.date', 'DESC');
+
+    if (branchId) {
+      query.where('exp.branchId = :branchId', { branchId });
+    }
+
     if (from) {
       const fromDate = new Date(from);
       fromDate.setHours(0, 0, 0, 0);
@@ -70,15 +111,82 @@ export class ExpensesService {
     await this.expenseRepository.remove(expense);
   }
 
-  getSummaryByCategory(branchId: string, from: Date, to: Date) {
-    return this.expenseRepository
+  findInboxItems(branchId?: string, status: ExpenseInboxStatus = ExpenseInboxStatus.PENDING) {
+    const query = this.inboxRepository
+      .createQueryBuilder('inbox')
+      .leftJoinAndSelect('inbox.branch', 'branch')
+      .orderBy('inbox.receivedAt', 'DESC');
+
+    if (status) {
+      query.where('inbox.status = :status', { status });
+    }
+
+    if (branchId) {
+      query.andWhere('inbox.branchId = :branchId', { branchId });
+    }
+
+    return query.getMany();
+  }
+
+  async approveInboxItem(id: string, dto: ApproveExpenseInboxItemDto, user: any) {
+    const item = await this.inboxRepository.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Factura de bandeja no encontrada');
+
+    if (item.status !== ExpenseInboxStatus.PENDING) {
+      throw new BadRequestException('Esta factura ya fue procesada');
+    }
+
+    const targetBranchId = item.branchId || dto.branchId || user.branchId;
+    if (!targetBranchId) {
+      throw new BadRequestException('Debes seleccionar una sucursal para aprobar esta factura.');
+    }
+
+    if (user.role !== UserRole.SUPER_ADMIN && targetBranchId !== user.branchId) {
+      throw new BadRequestException('No puedes aprobar gastos fuera de tu sucursal.');
+    }
+
+    const amount = Number(item.amount || 0);
+    const ivaAmount = Number(item.ivaAmount || 0);
+
+    const createExpenseDto: CreateExpenseDto = {
+      category: dto.category ?? ExpenseCategory.OTHER,
+      description: dto.description || item.subject || `Factura ${item.receiptNumber || item.id.slice(0, 8)}`,
+      amount,
+      ivaAmount,
+      date: this.toDateInput(item.issueDate ? new Date(item.issueDate) : new Date()),
+      supplierName: item.supplierName || undefined,
+      supplierTaxId: item.supplierTaxId || undefined,
+      receiptNumber: item.receiptNumber || undefined,
+      paymentMethod: undefined,
+      isDeductible: true,
+      notes: dto.notes || `Aprobado desde bandeja de correo (${item.sourceEmail || 'sin remitente'})`,
+    };
+
+    const expense = await this.create(targetBranchId, createExpenseDto, user.id);
+
+    item.status = ExpenseInboxStatus.APPROVED;
+    item.branchId = targetBranchId;
+    item.approvedExpenseId = expense.id;
+    item.approvedByUserId = user.id;
+    item.approvedAt = new Date();
+    await this.inboxRepository.save(item);
+
+    return { inboxItem: item, expense };
+  }
+
+  getSummaryByCategory(branchId: string | undefined, from: Date, to: Date) {
+    const query = this.expenseRepository
       .createQueryBuilder('exp')
       .select(['exp.category AS category', 'SUM(exp.amount) AS total', 'SUM(exp.ivaAmount) AS totalIva'])
-      .where('exp.branchId = :branchId', { branchId })
       .andWhere('exp.date BETWEEN :from AND :to', { from, to })
       .groupBy('exp.category')
-      .orderBy('total', 'DESC')
-      .getRawMany();
+      .orderBy('total', 'DESC');
+
+    if (branchId) {
+      query.andWhere('exp.branchId = :branchId', { branchId });
+    }
+
+    return query.getRawMany();
   }
 }
 

@@ -4,7 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Category } from '../menu/entities/category.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
+import { Branch } from '../branches/entities/branch.entity';
 import { OrdersService } from '../orders/orders.service';
+import { EmailConfigService } from '../settings/services/email-config.service';
 import { CreateKioskOrderDto } from './dto/create-kiosk-order.dto';
 import { OrderType } from '../orders/entities/order.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -17,8 +19,10 @@ export class KioskService {
   constructor(
     @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
     @InjectRepository(BranchConfig) private readonly configRepository: Repository<BranchConfig>,
+    @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Customer) private readonly customerRepository: Repository<Customer>,
     private readonly ordersService: OrdersService,
+    private readonly emailConfigService: EmailConfigService,
   ) {}
 
   /**
@@ -26,6 +30,11 @@ export class KioskService {
    * Incluye categorías, productos y modificadores para el flujo de autopedido.
    */
   async getMenu(branchId: string) {
+    const branch = await this.branchRepository.findOne({ where: { id: branchId, isActive: true } });
+    if (!branch) {
+      throw new NotFoundException('Sucursal no encontrada o inactiva');
+    }
+
     const config = await this.configRepository.findOne({ where: { branchId } });
     if (!config?.kioskEnabled) {
       throw new NotFoundException('El kiosko no está habilitado para esta sucursal');
@@ -49,6 +58,10 @@ export class KioskService {
     );
 
     return {
+      branch: {
+        id: branch.id,
+        name: branch.name,
+      },
       branchConfig: {
         currency: config.currency,
         taxPercentage: config.taxPercentage,
@@ -116,35 +129,41 @@ export class KioskService {
 
     const qrDataUrl = await QRCode.toDataURL(customer.code, { width: 300, margin: 2 });
     let emailSent = false;
-    if (dto.email && process.env.SMTP_HOST) {
+    
+    if (dto.email) {
       try {
-        const base64Image = qrDataUrl.split(',')[1];
-        const smtpPass = String(process.env.SMTP_PASS ?? '').replace(/\s+/g, '');
+        // Obtener configuración centralizada de correo
+        const emailConfig = await this.emailConfigService.getConfig();
+        
+        if (emailConfig.isEnabled && emailConfig.smtpHost) {
+          const base64Image = qrDataUrl.split(',')[1];
+          const smtpPass = String(emailConfig.smtpPassword ?? '').replace(/\s+/g, '');
 
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT ?? 587),
-          secure: process.env.SMTP_SECURE === 'true',
-          auth: { user: process.env.SMTP_USER, pass: smtpPass },
-        });
+          const transporter = nodemailer.createTransport({
+            host: emailConfig.smtpHost,
+            port: emailConfig.smtpPort,
+            secure: emailConfig.smtpSecure,
+            auth: { user: emailConfig.smtpUser, pass: smtpPass },
+          });
 
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
-          to: dto.email,
-          subject: '¡Tu código QR de fidelidad está listo! 🎉',
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#fff;border-radius:12px;border:1px solid #e5e7eb">
-              <h2 style="color:#ea580c;margin:0 0 8px">¡Bienvenido, ${customer.name}!</h2>
-              <p style="color:#4b5563">Tu código de cliente es: <strong style="font-size:1.2em">${customer.code}</strong></p>
-              <p style="color:#4b5563">Presenta el siguiente código QR en el kiosko para acumular puntos en tus pedidos:</p>
-              <div style="text-align:center;margin:24px 0">
-                <img src="cid:qrcode" alt="QR Code" style="width:200px;height:200px;border-radius:8px" />
-              </div>
-              <p style="color:#9ca3af;font-size:0.85em;text-align:center">Puntos actuales: ${customer.loyaltyPoints}</p>
-            </div>`,
-          attachments: [{ filename: 'qr.png', content: base64Image, encoding: 'base64', cid: 'qrcode' }],
-        });
-        emailSent = true;
+          await transporter.sendMail({
+            from: `${emailConfig.senderName} <${emailConfig.senderEmail}>`,
+            to: dto.email,
+            subject: '¡Tu código QR de fidelidad está listo! 🎉',
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#fff;border-radius:12px;border:1px solid #e5e7eb">
+                <h2 style="color:#ea580c;margin:0 0 8px">¡Bienvenido, ${customer.name}!</h2>
+                <p style="color:#4b5563">Tu código de cliente es: <strong style="font-size:1.2em">${customer.code}</strong></p>
+                <p style="color:#4b5563">Presenta el siguiente código QR en el kiosko para acumular puntos en tus pedidos:</p>
+                <div style="text-align:center;margin:24px 0">
+                  <img src="cid:qrcode" alt="QR Code" style="width:200px;height:200px;border-radius:8px" />
+                </div>
+                <p style="color:#9ca3af;font-size:0.85em;text-align:center">Puntos actuales: ${customer.loyaltyPoints}</p>
+              </div>`,
+            attachments: [{ filename: 'qr.png', content: base64Image, encoding: 'base64', cid: 'qrcode' }],
+          });
+          emailSent = true;
+        }
       } catch (_) {
         // Email falla silenciosamente — el registro ya fue creado
       }

@@ -22,8 +22,8 @@ export class Customer {
   @Column({ length: 50, nullable: true })
   phone: string;
 
-  @Column({ nullable: true })
-  taxId: string; // RFC, NIT, RUC, etc.
+  @Column({ length: 50, nullable: true })
+  taxId: string; // RFC, NIT, RUC, etc. - Alfanumérica (Hacienda 4.4)
 
   @Column({ length: 2, nullable: true })
   taxIdType: string; // '01' Física, '02' Jurídica, '03' DIMEX, '04' NITE
@@ -36,6 +36,9 @@ export class Customer {
 
   @Column({ nullable: true })
   birthdate: Date;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string;
 
   @Column({ default: true })
   isActive: boolean;

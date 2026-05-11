@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsEmail, IsDateString, MaxLength, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsDateString, MaxLength, IsBoolean, ValidateIf } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
@@ -18,10 +19,10 @@ export class CreateCustomerDto {
   @MaxLength(50)
   phone?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Cédula/RUC alfanumérica (Hacienda 4.4)' })
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   taxId?: string;
 
   @ApiProperty({ required: false, enum: ['01', '02', '03', '04'] })
@@ -36,10 +37,12 @@ export class CreateCustomerDto {
   @MaxLength(300)
   address?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Fecha de nacimiento (opcional, formato YYYY-MM-DD)' })
   @IsOptional()
+  @Transform(({ value }) => (value === '' || !value ? undefined : value))
+  @ValidateIf((obj) => obj.birthdate !== undefined)
   @IsDateString()
-  birthDate?: string;
+  birthdate?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -66,10 +69,10 @@ export class UpdateCustomerDto {
   @MaxLength(50)
   phone?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Cédula/RUC alfanumérica (Hacienda 4.4)' })
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @MaxLength(50)
   taxId?: string;
 
   @ApiProperty({ required: false, enum: ['01', '02', '03', '04'] })
@@ -84,10 +87,12 @@ export class UpdateCustomerDto {
   @MaxLength(300)
   address?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Fecha de nacimiento (opcional, formato YYYY-MM-DD)' })
   @IsOptional()
+  @Transform(({ value }) => (value === '' || !value ? undefined : value))
+  @ValidateIf((obj) => obj.birthdate !== undefined)
   @IsDateString()
-  birthDate?: string;
+  birthdate?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

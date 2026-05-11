@@ -1,17 +1,161 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import api from '../../../lib/api';
 import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
 import { useSettings } from '../../../hooks/useSettings';
 import { formatCurrency } from '../../../stores/settings.store';
+import { useAuthStore } from '../../../stores/auth.store';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+
+type Branch = { id: string; name: string; isActive: boolean };
+type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+type BusinessHours = Record<DayKey, { open: string; close: string; closed: boolean }>;
+type BranchConfig = { id: string; branchId: string; businessHours?: Partial<BusinessHours> | null };
+type DailySales = {
+  orderCount: number;
+  totalSales: number;
+  avgTicket: number;
+  totalTax: number;
+  totalTip: number;
+  totalDiscount: number;
+  pointsDiscount: number;
+  cashSales: number;
+  cardSales: number;
+};
+
+type ShiftCurrent = {
+  id: string;
+  status: string;
+  openedAt: string;
+  openingCash: number;
+  openedBy?: { name?: string };
+} | null;
+
+type AlertType = 'critical' | 'warning' | 'ok';
+type OperationalAlert = {
+  branchId: string;
+  branchName: string;
+  type: AlertType;
+  icon: string;
+  title: string;
+  message: string;
+  details?: string;
+};
+
+const DEFAULT_BUSINESS_HOURS: BusinessHours = {
+  monday: { open: '06:00', close: '22:00', closed: false },
+  tuesday: { open: '06:00', close: '22:00', closed: false },
+  wednesday: { open: '06:00', close: '22:00', closed: false },
+  thursday: { open: '06:00', close: '22:00', closed: false },
+  friday: { open: '06:00', close: '22:00', closed: false },
+  saturday: { open: '06:00', close: '22:00', closed: false },
+  sunday: { open: '06:00', close: '22:00', closed: false },
+};
+
+function mergeBusinessHours(input?: Partial<BusinessHours> | null): BusinessHours {
+  return {
+    monday: { ...DEFAULT_BUSINESS_HOURS.monday, ...(input?.monday ?? {}) },
+    tuesday: { ...DEFAULT_BUSINESS_HOURS.tuesday, ...(input?.tuesday ?? {}) },
+    wednesday: { ...DEFAULT_BUSINESS_HOURS.wednesday, ...(input?.wednesday ?? {}) },
+    thursday: { ...DEFAULT_BUSINESS_HOURS.thursday, ...(input?.thursday ?? {}) },
+    friday: { ...DEFAULT_BUSINESS_HOURS.friday, ...(input?.friday ?? {}) },
+    saturday: { ...DEFAULT_BUSINESS_HOURS.saturday, ...(input?.saturday ?? {}) },
+    sunday: { ...DEFAULT_BUSINESS_HOURS.sunday, ...(input?.sunday ?? {}) },
+  };
+}
+
+function dayKeyFromDate(date: Date): DayKey {
+  const map: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  return map[date.getDay()];
+}
+
+function timeToMinutes(value: string): number {
+  const [h, m] = value.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 + m;
+}
+
+function isWithinOperatingHours(hours: BusinessHours, now: Date): boolean {
+  const key = dayKeyFromDate(now);
+  const cfg = hours[key];
+  if (!cfg || cfg.closed) return false;
+
+  const open = timeToMinutes(cfg.open);
+  const close = timeToMinutes(cfg.close);
+  const current = now.getHours() * 60 + now.getMinutes();
+
+  if (open === close) return true;
+  if (open < close) return current >= open && current < close;
+  return current >= open || current < close;
+}
+
+function getTodayScheduleLabel(hours: BusinessHours, now: Date): string {
+  const key = dayKeyFromDate(now);
+  const cfg = hours[key];
+  if (!cfg || cfg.closed) return 'Cerrado';
+  return `${cfg.open} - ${cfg.close}`;
+}
 
 function toDateInputValue(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function calculateAlerts(
+  globalRows: Array<{ branchId: string; branchName: string; daily: DailySales | null; shift: ShiftCurrent; isShiftOpen: boolean; businessHours: BusinessHours }>,
+): OperationalAlert[] {
+  const alerts: OperationalAlert[] = [];
+  const now = new Date();
+
+  for (const row of globalRows) {
+    const isOperatingHours = isWithinOperatingHours(row.businessHours, now);
+    const scheduleLabel = getTodayScheduleLabel(row.businessHours, now);
+
+    // Alerta 1: Caja cerrada en horario operativo
+    if (isOperatingHours && !row.isShiftOpen) {
+      alerts.push({
+        branchId: row.branchId,
+        branchName: row.branchName,
+        type: 'critical',
+        icon: '🔴',
+        title: 'Caja cerrada en horario',
+        message: `Necesita apertura inmediata. Hora actual: ${now.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`,
+        details: `Estado: Cerrada | Horario hoy: ${scheduleLabel}`,
+      });
+      continue;
+    }
+
+    // Alerta 2: Pocas órdenes en la última hora (posible caída de pedidos)
+    const orderThreshold = 2;
+    if ((row.daily?.orderCount ?? 0) < orderThreshold && isOperatingHours && row.isShiftOpen) {
+      alerts.push({
+        branchId: row.branchId,
+        branchName: row.branchName,
+        type: 'warning',
+        icon: '🟡',
+        title: 'Caída de pedidos detectada',
+        message: `Solo ${row.daily?.orderCount ?? 0} órdenes hoy. Revisar estado de sistemas.`,
+        details: `Ventas: ${row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
+      });
+      continue;
+    }
+
+    // Alerta 3: Todo está bien
+    alerts.push({
+      branchId: row.branchId,
+      branchName: row.branchName,
+      type: 'ok',
+      icon: '🟢',
+      title: 'Operaciones normales',
+      message: `${row.daily?.orderCount ?? 0} órdenes | Caja ${row.isShiftOpen ? 'abierta' : 'cerrada'}`,
+      details: `Ventas: ${row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
+    });
+  }
+
+  return alerts;
 }
 
 const CARD_COLORS: Record<string, { bg: string; border: string; label: string; value: string; icon: string }> = {
@@ -38,12 +182,89 @@ function StatCard({ label, value, icon, color = 'slate' }: { label: string; valu
 }
 
 export default function DashboardPage() {
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'super_admin';
   const branchId = useActiveBranchId();
   const settings = useSettings();
 
   const today = toDateInputValue(new Date());
   const monthAgo = toDateInputValue(new Date(Date.now() - 30 * 86400_000));
   const ninetyDaysAgo = toDateInputValue(new Date(Date.now() - 90 * 86400_000));
+
+  const {
+    data: allBranches = [],
+    isLoading: allBranchesLoading,
+  } = useQuery<Branch[]>({
+    queryKey: ['dashboard-global-branches'],
+    queryFn: () => api.get('/branches?includeInactive=true').then((r) => r.data),
+    enabled: isSuperAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  const activeBranches = allBranches.filter((b) => b.isActive);
+
+  const globalDailyQueries = useQueries({
+    queries: activeBranches.map((b) => ({
+      queryKey: ['dashboard-global-daily-sales', b.id, today],
+      queryFn: () => api.get(`/reports/daily-sales?branchId=${b.id}&date=${today}`).then((r) => r.data as DailySales),
+      enabled: isSuperAdmin,
+      refetchInterval: 30_000,
+    })),
+  });
+
+  const globalShiftQueries = useQueries({
+    queries: activeBranches.map((b) => ({
+      queryKey: ['dashboard-global-current-shift', b.id],
+      queryFn: () => api.get(`/pos/shift/current?branchId=${b.id}`).then((r) => r.data as ShiftCurrent).catch(() => null),
+      enabled: isSuperAdmin,
+      refetchInterval: 30_000,
+    })),
+  });
+
+  const globalConfigQueries = useQueries({
+    queries: activeBranches.map((b) => ({
+      queryKey: ['dashboard-global-branch-config', b.id],
+      queryFn: () => api.get(`/branches/${b.id}/config`).then((r) => r.data as BranchConfig),
+      enabled: isSuperAdmin,
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  const globalRows = activeBranches.map((b, idx) => {
+    const daily = (globalDailyQueries[idx]?.data ?? null) as DailySales | null;
+    const shift = (globalShiftQueries[idx]?.data ?? null) as ShiftCurrent;
+    const config = (globalConfigQueries[idx]?.data ?? null) as BranchConfig | null;
+    return {
+      branchId: b.id,
+      branchName: b.name,
+      daily,
+      shift,
+      isShiftOpen: !!shift,
+      businessHours: mergeBusinessHours(config?.businessHours),
+    };
+  });
+
+  const globalTotals = globalRows.reduce(
+    (acc, row) => ({
+      branches: acc.branches + 1,
+      withOpenShift: acc.withOpenShift + (row.isShiftOpen ? 1 : 0),
+      totalSales: acc.totalSales + (row.daily?.totalSales ?? 0),
+      totalOrders: acc.totalOrders + (row.daily?.orderCount ?? 0),
+    }),
+    { branches: 0, withOpenShift: 0, totalSales: 0, totalOrders: 0 },
+  );
+
+  const globalAvgTicket =
+    globalTotals.totalOrders > 0 ? globalTotals.totalSales / globalTotals.totalOrders : 0;
+
+  const globalLoading =
+    isSuperAdmin &&
+    (
+      allBranchesLoading
+      || globalDailyQueries.some((q) => q.isLoading)
+      || globalShiftQueries.some((q) => q.isLoading)
+      || globalConfigQueries.some((q) => q.isLoading)
+    );
 
   const { data: dailySales } = useQuery({
     queryKey: ['daily-sales', branchId, today],
@@ -105,6 +326,110 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 pb-8">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h2>
+
+      {isSuperAdmin && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-white/5 dark:border-white/10 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Vista global multi-sucursal (hoy)</h3>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Actualización automática cada 30s</span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Sucursales activas" value={String(globalTotals.branches)} icon="🏢" color="slate" />
+            <StatCard label="Cajas abiertas" value={String(globalTotals.withOpenShift)} icon="🟢" color="green" />
+            <StatCard label="Ventas red" value={formatCurrency(globalTotals.totalSales, settings)} icon="🌐" color="blue" />
+            <StatCard label="Ticket promedio red" value={formatCurrency(globalAvgTicket, settings)} icon="🧾" color="indigo" />
+          </div>
+
+          {globalLoading ? (
+            <div className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-white/15 dark:text-gray-400">
+              Cargando estado global de sucursales...
+            </div>
+          ) : globalRows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-white/15 dark:text-gray-400">
+              No hay sucursales activas para mostrar.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-white/10">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-white/10 text-sm">
+                  <thead className="bg-gray-50 dark:bg-white/5">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <th className="px-3 py-2">Sucursal</th>
+                      <th className="px-3 py-2">Caja</th>
+                      <th className="px-3 py-2">Ventas día</th>
+                      <th className="px-3 py-2">Órdenes día</th>
+                      <th className="px-3 py-2">Ticket prom.</th>
+                      <th className="px-3 py-2">Última apertura</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {globalRows
+                      .sort((a, b) => (b.daily?.totalSales ?? 0) - (a.daily?.totalSales ?? 0))
+                      .map((row) => (
+                        <tr key={row.branchId} className="bg-white dark:bg-transparent">
+                          <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{row.branchName}</td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                row.isShiftOpen
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-slate-700/30 dark:text-slate-300'
+                              }`}
+                            >
+                              {row.isShiftOpen ? 'Abierta' : 'Cerrada'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{formatCurrency(row.daily?.totalSales ?? 0, settings)}</td>
+                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{row.daily?.orderCount ?? 0}</td>
+                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{formatCurrency(row.daily?.avgTicket ?? 0, settings)}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                            {row.shift?.openedAt ? new Date(row.shift.openedAt).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Alertas operativas por sucursal */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Alertas operativas</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {calculateAlerts(globalRows).map((alert) => {
+                    const bgColor =
+                      alert.type === 'critical' ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30'
+                        : alert.type === 'warning' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'
+                          : 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30';
+                    const textColor =
+                      alert.type === 'critical' ? 'text-red-900 dark:text-red-200'
+                        : alert.type === 'warning' ? 'text-amber-900 dark:text-amber-200'
+                          : 'text-emerald-900 dark:text-emerald-200';
+                    const titleColor =
+                      alert.type === 'critical' ? 'text-red-800 dark:text-red-300'
+                        : alert.type === 'warning' ? 'text-amber-800 dark:text-amber-300'
+                          : 'text-emerald-800 dark:text-emerald-300';
+
+                    return (
+                      <div key={`${alert.branchId}-${alert.type}`} className={`rounded-lg border p-3 ${bgColor}`}>
+                        <div className="flex items-start gap-2">
+                          <span className="text-lg flex-shrink-0">{alert.icon}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-xs font-semibold ${titleColor}`}>{alert.branchName}</p>
+                            <p className={`text-sm font-medium ${textColor} mt-0.5`}>{alert.title}</p>
+                            <p className={`text-xs ${textColor} opacity-90 mt-1`}>{alert.message}</p>
+                            {alert.details && <p className={`text-xs ${textColor} opacity-75 mt-1`}>{alert.details}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
         <StatCard label="Ventas del día"    value={formatCurrency(dailySales?.totalSales ?? 0, settings)}   icon="💰" color="amber" />

@@ -38,7 +38,7 @@ export default function CustomersPage() {
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [showModal, setShowModal] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', taxId: '', taxIdType: '', address: '', birthDate: '', notes: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', taxId: '', taxIdType: '', address: '', birthdate: '', notes: '' });
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -87,14 +87,14 @@ export default function CustomersPage() {
 
   function openNew() {
     setEditCustomer(null);
-    setForm({ name: '', email: '', phone: '', taxId: '', taxIdType: '', address: '', birthDate: '', notes: '' });
+    setForm({ name: '', email: '', phone: '', taxId: '', taxIdType: '', address: '', birthdate: '', notes: '' });
     setFormError('');
     setFieldErrors({});
     setShowModal(true);
   }
   function openEdit(c: Customer) {
     setEditCustomer(c);
-    setForm({ name: c.name, email: c.email ?? '', phone: c.phone ?? '', taxId: c.taxId ?? '', taxIdType: c.taxIdType ?? '', address: c.address ?? '', birthDate: c.birthdate ?? '', notes: c.notes ?? '' });
+    setForm({ name: c.name, email: c.email ?? '', phone: c.phone ?? '', taxId: c.taxId ?? '', taxIdType: c.taxIdType ?? '', address: c.address ?? '', birthdate: c.birthdate ?? '', notes: c.notes ?? '' });
     setFormError('');
     setFieldErrors({});
     setShowModal(true);
@@ -236,7 +236,7 @@ export default function CustomersPage() {
             {/* Fecha de nacimiento */}
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento</label>
               <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
+                value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} />
             </div>
 
             {/* Notas */}

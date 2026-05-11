@@ -25,9 +25,9 @@ export class UsersService {
   }
 
   findAll(branchId?: string): Promise<User[]> {
-    const where: Partial<User> = { isActive: true };
+    const where: Partial<User> = {};
     if (branchId) where.branchId = branchId;
-    return this.userRepository.find({ where, select: ['id', 'name', 'email', 'role', 'branchId', 'lastLoginAt'] });
+    return this.userRepository.find({ where, relations: ['branch'], select: ['id', 'name', 'email', 'role', 'branchId', 'isActive', 'lastLoginAt'], order: { isActive: 'DESC', name: 'ASC' } });
   }
 
   async findOne(id: string): Promise<User> {

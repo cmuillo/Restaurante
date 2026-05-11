@@ -92,4 +92,26 @@ export class ReportsController {
   ) {
     return this.reportsService.salesByCategory(branchId, new Date(from), new Date(to));
   }
+
+  @Get('cash-shifts')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Reporte de aperturas y cierres de caja' })
+  cashShifts(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.reportsService.cashShifts(branchId, new Date(from), new Date(to));
+  }
+
+  @Get('cash-movements')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Reporte de movimientos de caja' })
+  cashMovements(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.reportsService.cashMovements(branchId, new Date(from), new Date(to));
+  }
 }

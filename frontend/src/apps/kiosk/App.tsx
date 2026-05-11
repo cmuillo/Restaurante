@@ -50,12 +50,14 @@ export default function App() {
   }, [screen, reset]);
 
   // Pre-carga datos del menú para kiosco (sin auth requerido)
-  useQuery({
+  const { data: kioskMenu } = useQuery({
     queryKey: ['kiosk-menu', BRANCH_ID],
     queryFn: () => api.get(`/kiosk/${BRANCH_ID}/menu`).then((r) => r.data),
     enabled: !!BRANCH_ID,
     staleTime: 5 * 60_000,
   });
+
+  const activeBranchLabel = kioskMenu?.branch?.name || (BRANCH_ID ? `Sucursal ${BRANCH_ID.slice(0, 8)}` : 'Sucursal no configurada');
 
   const placeOrder = useMutation({
     mutationFn: (_paymentMethod: 'CARD' | 'CASH') =>
@@ -104,7 +106,13 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-full" onClick={touch} onTouchStart={touch}>
+    <div className="w-full h-full relative" onClick={touch} onTouchStart={touch}>
+      <div className="fixed top-3 right-3 z-50 pointer-events-none">
+        <div className="rounded-full border border-white/25 bg-black/55 backdrop-blur px-3 py-1.5 text-xs text-white shadow-lg">
+          <span className="mr-1.5">🏢</span>
+          <span className="font-semibold">{activeBranchLabel}</span>
+        </div>
+      </div>
       {screenMap[screen]}
     </div>
   );

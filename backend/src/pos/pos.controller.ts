@@ -8,6 +8,7 @@ import { BranchScopeGuard } from '../auth/guards/branch-scope.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import { CreateCashMovementDto } from './dto/cash-movement.dto';
 
 @ApiTags('POS')
 @ApiBearerAuth()
@@ -53,5 +54,23 @@ export class PosController {
     @Query('limit') limit?: number,
   ) {
     return this.posService.getShiftHistory(branchId, limit);
+  }
+
+  @Get('cash-movements')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Estado y movimientos de la caja activa' })
+  getCurrentCashState(@Query('branchId', ParseUUIDPipe) branchId: string) {
+    return this.posService.getCurrentCashState(branchId);
+  }
+
+  @Post('cash-movements')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Registrar movimiento manual de caja' })
+  createCashMovement(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @CurrentUser() user: any,
+    @Body() dto: CreateCashMovementDto,
+  ) {
+    return this.posService.createCashMovement(branchId, user.id, dto);
   }
 }

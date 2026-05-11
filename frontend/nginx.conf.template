@@ -36,6 +36,10 @@ server {
     }
 
     # Normalizar rutas sin slash final
+    location = /login {
+        return 301 /admin/login;
+    }
+
     location = /admin {
         return 301 /admin/;
     }

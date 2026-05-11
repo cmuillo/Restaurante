@@ -4,6 +4,7 @@ import { Repository, ILike } from 'typeorm';
 import { Customer } from './entities/customer.entity';
 import { LoyaltyTransaction } from './entities/loyalty-transaction.entity';
 import { CreateCustomerDto, UpdateCustomerDto } from './dto/customer.dto';
+import { EmailConfigService } from '../settings/services/email-config.service';
 import * as QRCode from 'qrcode';
 import * as nodemailer from 'nodemailer';
 
@@ -12,6 +13,7 @@ export class CustomersService {
   constructor(
     @InjectRepository(Customer) private readonly customerRepository: Repository<Customer>,
     @InjectRepository(LoyaltyTransaction) private readonly loyaltyRepository: Repository<LoyaltyTransaction>,
+    private readonly emailConfigService: EmailConfigService,
   ) {}
 
   findAll(search?: string, isActive?: boolean): Promise<Customer[]> {
@@ -77,30 +79,33 @@ export class CustomersService {
       throw new BadRequestException('El cliente no tiene un correo registrado');
     }
 
-    if (!process.env.SMTP_HOST) {
-      throw new BadRequestException('SMTP no está configurado en el servidor');
-    }
-
     if (!customer.code) {
       throw new BadRequestException('El cliente no tiene código QR asignado');
     }
 
+    // Obtener configuración centralizada de correo
+    const emailConfig = await this.emailConfigService.getConfig();
+
+    if (!emailConfig.isEnabled || !emailConfig.smtpHost) {
+      throw new BadRequestException('El servicio de correo no está configurado. Contacta al administrador.');
+    }
+
     const qrDataUrl = await QRCode.toDataURL(customer.code, { width: 300, margin: 2 });
     const base64Image = qrDataUrl.split(',')[1];
-    const smtpPass = String(process.env.SMTP_PASS ?? '').replace(/\s+/g, '');
+    const smtpPass = String(emailConfig.smtpPassword ?? '').replace(/\s+/g, '');
 
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT ?? 587),
-      secure: process.env.SMTP_SECURE === 'true',
+      host: emailConfig.smtpHost,
+      port: emailConfig.smtpPort,
+      secure: emailConfig.smtpSecure,
       auth: {
-        user: process.env.SMTP_USER,
+        user: emailConfig.smtpUser,
         pass: smtpPass,
       },
     });
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+      from: `${emailConfig.senderName} <${emailConfig.senderEmail}>`,
       to: customer.email,
       subject: 'Tu código QR de fidelidad',
       html: `

@@ -3,11 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Table, TableStatus } from './entities/table.entity';
 import { CreateTableDto, UpdateTableDto } from './dto/table.dto';
+import { RestaurantGateway } from '../websockets/restaurant.gateway';
 
 @Injectable()
 export class TablesService {
   constructor(
     @InjectRepository(Table) private readonly tableRepository: Repository<Table>,
+    private readonly gateway: RestaurantGateway,
   ) {}
 
   findAll(branchId: string): Promise<Table[]> {
@@ -31,14 +33,18 @@ export class TablesService {
       capacity: dto.capacity,
       name: dto.location,
     });
-    return this.tableRepository.save(table);
+    const saved = await this.tableRepository.save(table);
+    this.gateway.emitTableUpdated(branchId, { id: saved.id, status: saved.status });
+    return saved;
   }
 
   async updateStatus(id: string, branchId: string, status: TableStatus, waiterId?: string): Promise<Table> {
     const updates: Partial<Table> = { status };
     if (waiterId !== undefined) updates.assignedWaiterId = waiterId;
     await this.tableRepository.update({ id, branchId }, updates as any);
-    return this.findOne(id, branchId);
+    const table = await this.findOne(id, branchId);
+    this.gateway.emitTableUpdated(branchId, { id: table.id, status: table.status });
+    return table;
   }
 
   async update(id: string, branchId: string, dto: UpdateTableDto): Promise<Table> {
@@ -50,11 +56,14 @@ export class TablesService {
     };
 
     await this.tableRepository.update({ id, branchId }, updates as any);
-    return this.findOne(id, branchId);
+    const table = await this.findOne(id, branchId);
+    this.gateway.emitTableUpdated(branchId, { id: table.id, status: table.status });
+    return table;
   }
 
   async remove(id: string, branchId: string): Promise<void> {
     const table = await this.findOne(id, branchId);
     await this.tableRepository.update(table.id, { isActive: false });
+    this.gateway.emitTableUpdated(branchId, { id: table.id, isActive: false });
   }
 }

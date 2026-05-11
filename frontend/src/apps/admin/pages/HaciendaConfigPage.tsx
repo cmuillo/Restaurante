@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../../lib/api';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -46,26 +48,46 @@ const SANDBOX_API = 'https://api-sandbox.comprobanteselectronicos.go.cr/recepcio
 const PROD_IDP    = 'https://idp.comprobanteselectronicos.go.cr/auth/realms/rut/protocol/openid-connect/token';
 const PROD_API    = 'https://api.comprobanteselectronicos.go.cr/recepcion/v1';
 
+const STATUS_META: Record<string, { label: string; icon: string; cls: string }> = {
+  pending:     { label: 'Pendiente', icon: '⏳', cls: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  sending:     { label: 'Enviando', icon: '📤', cls: 'bg-blue-50 text-blue-800 border-blue-200' },
+  sent:        { label: 'Enviado', icon: '📨', cls: 'bg-cyan-50 text-cyan-800 border-cyan-200' },
+  accepted:    { label: 'Aceptado', icon: '✅', cls: 'bg-green-50 text-green-800 border-green-200' },
+  rejected:    { label: 'Rechazado', icon: '❌', cls: 'bg-red-50 text-red-800 border-red-200' },
+  error:       { label: 'Error', icon: '⚠️', cls: 'bg-red-50 text-red-800 border-red-200' },
+  contingency: { label: 'Contingencia', icon: '🛟', cls: 'bg-orange-50 text-orange-800 border-orange-200' },
+};
+
 // ─── Badge de estado ─────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    pending:    { label: 'Pendiente',   cls: 'bg-yellow-100 text-yellow-700' },
-    sending:    { label: 'Enviando',    cls: 'bg-blue-100 text-blue-700' },
-    sent:       { label: 'Enviado',     cls: 'bg-cyan-100 text-cyan-700' },
-    accepted:   { label: 'Aceptado',    cls: 'bg-green-100 text-green-700' },
-    rejected:   { label: 'Rechazado',   cls: 'bg-red-100 text-red-700' },
-    error:      { label: 'Error',       cls: 'bg-red-100 text-red-700' },
-    contingency:{ label: 'Contingencia',cls: 'bg-orange-100 text-orange-700' },
+  const { label, cls, icon } = STATUS_META[status] ?? {
+    label: status,
+    icon: '•',
+    cls: 'bg-gray-50 text-gray-700 border-gray-200',
   };
-  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600' };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{label}</span>;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cls}`}>
+      <span>{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
 }
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 mt-6 first:mt-0">{children}</h3>;
+}
+
+const INPUT = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function HaciendaConfigPage() {
   const qc = useQueryClient();
+  const settings = useSettings();
   const [tab, setTab] = useState<'emisor' | 'credenciales' | 'certificado' | 'estado'>('emisor');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'accepted' | 'pending' | 'error' | 'rejected' | 'contingency' | 'sending' | 'sent'>('all');
+  const [search, setSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─── Queries ─────────────────────────────────────────────────────────────
@@ -133,8 +155,13 @@ export default function HaciendaConfigPage() {
     return (
       <form
         onSubmit={(e) => { e.preventDefault(); updateMut.mutate(form); }}
-        className="space-y-6 max-w-xl"
+        className="space-y-6"
       >
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm font-semibold text-blue-900">Datos del emisor</p>
+          <p className="mt-1 text-xs text-blue-700">Estos datos se usan para construir la clave, consecutivo y metadatos fiscales de cada comprobante.</p>
+        </div>
+
         {/* Habilitado */}
         <label className="flex items-center gap-3 cursor-pointer">
           <div className="relative">
@@ -155,7 +182,7 @@ export default function HaciendaConfigPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de identificación</label>
             <select
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               value={form.haciendaTaxIdType}
               onChange={(e) => setForm({ ...form, haciendaTaxIdType: e.target.value })}
             >
@@ -168,7 +195,7 @@ export default function HaciendaConfigPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Número de cédula / RUC</label>
             <input
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               placeholder="Sin guiones"
               value={form.haciendaTaxId}
               onChange={(e) => setForm({ ...form, haciendaTaxId: e.target.value })}
@@ -178,13 +205,13 @@ export default function HaciendaConfigPage() {
 
         {/* Ubicación (tablas Hacienda) */}
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-2">Ubicación del emisor</p>
+          <SectionTitle>Ubicación del emisor</SectionTitle>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Provincia</label>
               <input
                 maxLength={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className={INPUT}
                 value={form.haciendaProvince}
                 onChange={(e) => setForm({ ...form, haciendaProvince: e.target.value })}
               />
@@ -193,7 +220,7 @@ export default function HaciendaConfigPage() {
               <label className="block text-xs text-gray-500 mb-1">Cantón</label>
               <input
                 maxLength={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className={INPUT}
                 value={form.haciendaCanton}
                 onChange={(e) => setForm({ ...form, haciendaCanton: e.target.value })}
               />
@@ -202,7 +229,7 @@ export default function HaciendaConfigPage() {
               <label className="block text-xs text-gray-500 mb-1">Distrito</label>
               <input
                 maxLength={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className={INPUT}
                 value={form.haciendaDistrict}
                 onChange={(e) => setForm({ ...form, haciendaDistrict: e.target.value })}
               />
@@ -219,7 +246,7 @@ export default function HaciendaConfigPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Código de sucursal (3 dígitos)</label>
             <input
               maxLength={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               value={form.haciendaBranchCode}
               onChange={(e) => setForm({ ...form, haciendaBranchCode: e.target.value })}
             />
@@ -228,7 +255,7 @@ export default function HaciendaConfigPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Código de terminal (5 dígitos)</label>
             <input
               maxLength={5}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               value={form.haciendaTerminalCode}
               onChange={(e) => setForm({ ...form, haciendaTerminalCode: e.target.value })}
             />
@@ -278,8 +305,13 @@ export default function HaciendaConfigPage() {
     return (
       <form
         onSubmit={(e) => { e.preventDefault(); updateMut.mutate(payload); }}
-        className="space-y-5 max-w-xl"
+        className="space-y-5"
       >
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <p className="text-sm font-semibold text-indigo-900">Autenticación con ATV</p>
+          <p className="mt-1 text-xs text-indigo-700">Mantenga las credenciales seguras. Si deja la contraseña en blanco, no se sobreescribe la actual.</p>
+        </div>
+
         {/* Ambiente */}
         <div>
           <p className="text-sm font-medium text-gray-700 mb-2">Ambiente</p>
@@ -310,7 +342,7 @@ export default function HaciendaConfigPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
           <input
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className={INPUT}
             value={form.haciendaClientId}
             onChange={(e) => setForm({ ...form, haciendaClientId: e.target.value })}
           />
@@ -321,7 +353,7 @@ export default function HaciendaConfigPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Usuario ATV</label>
             <input
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               value={form.haciendaUsername}
               onChange={(e) => setForm({ ...form, haciendaUsername: e.target.value })}
             />
@@ -333,7 +365,7 @@ export default function HaciendaConfigPage() {
             <input
               type="password"
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               placeholder={cfg?.haciendaPassword ? '••••••••' : 'Ingresar contraseña'}
               value={form.haciendaPassword}
               onChange={(e) => setForm({ ...form, haciendaPassword: e.target.value })}
@@ -345,7 +377,7 @@ export default function HaciendaConfigPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">URL IDP (OAuth2)</label>
           <input
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-xs"
+            className={`${INPUT} font-mono text-xs`}
             value={form.haciendaIdpUrl}
             onChange={(e) => setForm({ ...form, haciendaIdpUrl: e.target.value })}
           />
@@ -353,7 +385,7 @@ export default function HaciendaConfigPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">URL API de recepción</label>
           <input
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-xs"
+            className={`${INPUT} font-mono text-xs`}
             value={form.haciendaApiUrl}
             onChange={(e) => setForm({ ...form, haciendaApiUrl: e.target.value })}
           />
@@ -399,7 +431,7 @@ export default function HaciendaConfigPage() {
     }
 
     return (
-      <div className="space-y-8 max-w-xl">
+      <div className="space-y-8">
         {/* Estado actual */}
         <div className={`rounded-xl border p-4 ${cfg?.haciendaP12Loaded ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
           <p className="font-medium text-sm">
@@ -422,7 +454,7 @@ export default function HaciendaConfigPage() {
               <input
                 type="password"
                 autoComplete="new-password"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className={`flex-1 ${INPUT}`}
                 placeholder={cfg?.haciendaP12Password ? '••••••••' : 'Contraseña del certificado'}
                 value={p12Password}
                 onChange={(e) => { setP12Password(e.target.value); setPwSaved(false); }}
@@ -446,7 +478,7 @@ export default function HaciendaConfigPage() {
           </p>
 
           <div
-            className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-brand-400 transition-colors"
+            className="border-2 border-dashed border-gray-300 bg-gray-50 rounded-xl p-6 text-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 transition-colors"
             onClick={() => fileInputRef.current?.click()}
           >
             <input
@@ -474,7 +506,7 @@ export default function HaciendaConfigPage() {
             <input
               type="password"
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              className={INPUT}
               placeholder="Contraseña asignada al generar el .p12"
               value={p12Password}
               onChange={(e) => setP12Password(e.target.value)}
@@ -499,6 +531,22 @@ export default function HaciendaConfigPage() {
 
   // ─── Tabla de estado de comprobantes ─────────────────────────────────────
   function EstadoTab() {
+    const acceptedCount = statuses.filter((s) => s.haciendaStatus === 'accepted').length;
+    const errorCount = statuses.filter((s) => s.haciendaStatus === 'error' || s.haciendaStatus === 'rejected').length;
+    const inProgressCount = statuses.filter((s) => ['pending', 'sending', 'sent', 'contingency'].includes(s.haciendaStatus)).length;
+    const resendableCount = statuses.filter((s) => s.haciendaStatus === 'error' || s.haciendaStatus === 'rejected').length;
+
+    const q = search.trim().toLowerCase();
+    const filteredStatuses = statuses.filter((inv) => {
+      const byStatus = statusFilter === 'all' ? true : inv.haciendaStatus === statusFilter;
+      const byText = !q
+        ? true
+        : inv.invoiceNumber?.toLowerCase().includes(q) ||
+          inv.haciendaKey?.toLowerCase().includes(q) ||
+          inv.haciendaDocType?.toLowerCase().includes(q);
+      return byStatus && byText;
+    });
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -507,21 +555,85 @@ export default function HaciendaConfigPage() {
           </p>
           <button
             onClick={() => refetchStatuses()}
-            className="text-xs text-brand-600 hover:underline"
+            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             Actualizar ahora
           </button>
         </div>
 
-        {statuses.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Buscar comprobante</label>
+              <input
+                className={INPUT}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="N° factura, clave o tipo..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Filtro rápido</label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: 'all', label: 'Todos' },
+                  { key: 'accepted', label: 'Aceptados' },
+                  { key: 'pending', label: 'Pendientes' },
+                  { key: 'sending', label: 'Enviando' },
+                  { key: 'sent', label: 'Enviados' },
+                  { key: 'contingency', label: 'Contingencia' },
+                  { key: 'error', label: 'Error' },
+                  { key: 'rejected', label: 'Rechazados' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setStatusFilter(opt.key as typeof statusFilter)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                      statusFilter === opt.key
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Mostrando <strong>{filteredStatuses.length}</strong> de <strong>{statuses.length}</strong> comprobantes.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-3">
+            <p className="text-xs uppercase tracking-wide text-green-700 font-semibold">Aceptados</p>
+            <p className="text-2xl font-bold text-green-900 mt-1">{acceptedCount}</p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs uppercase tracking-wide text-amber-700 font-semibold">En proceso</p>
+            <p className="text-2xl font-bold text-amber-900 mt-1">{inProgressCount}</p>
+          </div>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+            <p className="text-xs uppercase tracking-wide text-red-700 font-semibold">Con error</p>
+            <p className="text-2xl font-bold text-red-900 mt-1">{errorCount}</p>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+            <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Reenviables</p>
+            <p className="text-2xl font-bold text-blue-900 mt-1">{resendableCount}</p>
+          </div>
+        </div>
+
+        {filteredStatuses.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <p className="text-3xl mb-2">🧾</p>
-            <p>No hay comprobantes enviados aún</p>
+            <p>{statuses.length === 0 ? 'No hay comprobantes enviados aún' : 'No hay resultados con ese filtro'}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
             <table className="min-w-full text-sm divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50/90">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Factura</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
@@ -533,23 +645,23 @@ export default function HaciendaConfigPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
-                {statuses.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-xs">{inv.invoiceNumber}</td>
+                {filteredStatuses.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-gray-50 even:bg-gray-50/40">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-700">{inv.invoiceNumber}</td>
                     <td className="px-4 py-3 text-xs uppercase text-gray-600">{inv.haciendaDocType}</td>
-                    <td className="px-4 py-3 text-right font-medium">₡{Number(inv.total).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(Number(inv.total), settings)}</td>
                     <td className="px-4 py-3">
                       <div className="space-y-1">
                         <StatusBadge status={inv.haciendaStatus} />
                         {inv.haciendaMessage && (
-                          <p className="text-xs text-gray-400 max-w-xs truncate" title={inv.haciendaMessage}>
+                          <p className="text-xs text-gray-500 max-w-xs truncate" title={inv.haciendaMessage}>
                             {inv.haciendaMessage}
                           </p>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400 truncate max-w-[12rem]" title={inv.haciendaKey}>
-                      {inv.haciendaKey?.slice(0, 20)}…
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 truncate max-w-[12rem]" title={inv.haciendaKey}>
+                      {inv.haciendaKey ? `${inv.haciendaKey.slice(0, 20)}…` : '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {inv.haciendaProcessedAt
@@ -561,7 +673,7 @@ export default function HaciendaConfigPage() {
                         <button
                           onClick={() => resendMut.mutate(inv.id)}
                           disabled={resendMut.isPending}
-                          className="text-xs text-brand-600 hover:underline disabled:opacity-50"
+                          className="inline-flex items-center rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50"
                         >
                           Reenviar
                         </button>
@@ -587,7 +699,7 @@ export default function HaciendaConfigPage() {
   ] as const;
 
   return (
-    <div>
+    <div className="max-w-3xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-1">Facturación Electrónica — Hacienda CR</h2>
       <p className="text-sm text-gray-500 mb-6">Configure los datos del emisor, credenciales ATV y certificado de firma digital.</p>
 
@@ -595,7 +707,7 @@ export default function HaciendaConfigPage() {
       <div className="mb-6 max-w-sm">
         <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
         <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          className={INPUT}
           value={selectedBranch}
           onChange={(e) => setSelectedBranch(e.target.value)}
         >
@@ -619,17 +731,32 @@ export default function HaciendaConfigPage() {
 
       {selectedBranch && !cfgLoading && cfg && (
         <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Ambiente</p>
+              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaEnvironment === 'production' ? 'Producción' : 'Sandbox'}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Emisión electrónica</p>
+              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaEnabled ? 'Habilitada' : 'Deshabilitada'}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${cfg.haciendaP12Loaded ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+              <p className="text-xs uppercase tracking-wide font-semibold text-gray-600">Firma digital</p>
+              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaP12Loaded ? 'Certificado cargado' : 'Pendiente de cargar'}</p>
+            </div>
+          </div>
+
           {/* Tabs */}
-          <div className="border-b border-gray-200 mb-6">
-            <nav className="flex gap-1">
+          <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
+            <nav className="flex gap-1 w-full">
               {tabs.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setTab(key)}
-                  className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
                     tab === key
-                      ? 'border-brand-600 text-brand-700'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {label}
@@ -639,10 +766,12 @@ export default function HaciendaConfigPage() {
           </div>
 
           {/* Contenido del tab activo */}
-          {tab === 'emisor'       && <EmisorTab />}
-          {tab === 'credenciales' && <CredencialesTab />}
-          {tab === 'certificado'  && <CertificadoTab />}
-          {tab === 'estado'       && <EstadoTab />}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+            {tab === 'emisor'       && <EmisorTab />}
+            {tab === 'credenciales' && <CredencialesTab />}
+            {tab === 'certificado'  && <CertificadoTab />}
+            {tab === 'estado'       && <EstadoTab />}
+          </div>
         </>
       )}
     </div>

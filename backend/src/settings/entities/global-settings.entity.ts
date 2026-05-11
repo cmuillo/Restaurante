@@ -51,6 +51,18 @@ export class GlobalSettings {
   @Column({ length: 20, default: '#ea580c' })
   brandColor: string;
 
+  /** Logo opcional exclusivo para la pantalla de login (base64). */
+  @Column('text', { nullable: true })
+  loginLogoBase64: string;
+
+  /** Color inicial del fondo degradado del login. */
+  @Column({ length: 20, default: '#EA580C' })
+  loginBackgroundColor: string;
+
+  /** Color final del fondo degradado del login. */
+  @Column({ length: 20, default: '#C2410C' })
+  loginBackgroundColorDark: string;
+
   // ─── Fiscal / Impuestos ───────────────────────────────────────────────────
   /** Tasa de impuesto por defecto (%) — Costa Rica: 13 */
   @Column('decimal', { precision: 5, scale: 2, default: 13 })

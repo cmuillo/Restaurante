@@ -11,6 +11,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { Product } from '../menu/entities/product.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { AuditService } from '../audit/audit.service';
+import { Table, TableStatus } from '../tables/entities/table.entity';
 
 @Injectable()
 export class OrdersService {
@@ -23,8 +24,52 @@ export class OrdersService {
     private readonly auditService: AuditService,
   ) {}
 
+  private async syncTableStatusForOrder(
+    manager: any,
+    order: Pick<Order, 'id' | 'branchId' | 'tableId' | 'type'>,
+    nextStatus: OrderStatus,
+  ): Promise<TableStatus | null> {
+    if (!order.tableId || order.type !== OrderType.DINE_IN) return null;
+
+    if (
+      nextStatus === OrderStatus.PENDING
+      || nextStatus === OrderStatus.IN_PREPARATION
+    ) {
+      await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.WAITING_FOOD });
+      return TableStatus.WAITING_FOOD;
+    }
+
+    if (nextStatus === OrderStatus.READY || nextStatus === OrderStatus.DELIVERED) {
+      await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.OCCUPIED });
+      return TableStatus.OCCUPIED;
+    }
+
+    if (nextStatus === OrderStatus.CANCELLED || nextStatus === OrderStatus.COMPLETED) {
+      const activeOrders = await manager.count(Order, {
+        where: {
+          branchId: order.branchId,
+          tableId: order.tableId,
+          type: OrderType.DINE_IN,
+          status: In([
+            OrderStatus.PENDING,
+            OrderStatus.IN_PREPARATION,
+            OrderStatus.READY,
+            OrderStatus.DELIVERED,
+          ]),
+        },
+      });
+
+      if (activeOrders === 0) {
+        await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.FREE });
+        return TableStatus.FREE;
+      }
+    }
+
+    return null;
+  }
+
   async create(dto: CreateOrderDto, userId?: string): Promise<Order> {
-    return this.dataSource.transaction(async (manager) => {
+    const created = await this.dataSource.transaction(async (manager) => {
       // Calcular totales
       let subtotal = 0;
       let taxAmount = 0;
@@ -104,6 +149,7 @@ export class OrdersService {
       });
 
       const saved = await manager.save(Order, order);
+      const tableStatus = await this.syncTableStatusForOrder(manager, saved, OrderStatus.PENDING);
 
       // Emitir a cocina en tiempo real
       this.gateway.emitNewOrder(dto.branchId, {
@@ -124,8 +170,17 @@ export class OrdersService {
         newValue: { orderNumber, type: dto.type, total },
       });
 
-      return saved;
+      return { saved, tableStatus };
     });
+
+    if (created.tableStatus && created.saved.tableId) {
+      this.gateway.emitTableUpdated(created.saved.branchId, {
+        id: created.saved.tableId,
+        status: created.tableStatus,
+      });
+    }
+
+    return created.saved;
   }
 
   async findAll(branchId: string, filters?: { status?: OrderStatus; type?: OrderType }) {
@@ -182,12 +237,24 @@ export class OrdersService {
       );
     }
 
-    const updates: Partial<Order> = { status: dto.status };
-    if (dto.status === OrderStatus.READY) updates.readyAt = new Date();
-    if (dto.status === OrderStatus.COMPLETED) updates.completedAt = new Date();
+    const result = await this.dataSource.transaction(async (manager) => {
+      const updates: Partial<Order> = { status: dto.status };
+      if (dto.status === OrderStatus.READY) updates.readyAt = new Date();
+      if (dto.status === OrderStatus.COMPLETED) updates.completedAt = new Date();
+      if (dto.status === OrderStatus.IN_PREPARATION) updates.preparationStartedAt = new Date();
 
-    await this.orderRepository.update(id, updates as any);
-    const updated = await this.findOne(id, branchId);
+      await manager.update(Order, id, updates as any);
+      const tableStatus = await this.syncTableStatusForOrder(manager, order, dto.status);
+      const updated = await manager.findOneOrFail(Order, {
+        where: { id, branchId },
+        relations: ['items', 'items.modifiers', 'table', 'user', 'customer', 'invoice'],
+      });
+      return { updated, tableStatus };
+    });
+
+    if (result.tableStatus && order.tableId) {
+      this.gateway.emitTableUpdated(branchId, { id: order.tableId, status: result.tableStatus });
+    }
 
     // Notificar al mesero cuando el pedido está listo
     if (dto.status === OrderStatus.READY) {
@@ -206,7 +273,7 @@ export class OrdersService {
       newValue: { status: dto.status },
     });
 
-    return updated;
+    return result.updated;
   }
 
   async cancel(id: string, branchId: string, reason: string, userId?: string): Promise<Order> {

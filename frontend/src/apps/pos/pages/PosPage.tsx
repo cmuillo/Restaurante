@@ -60,6 +60,11 @@ interface PosTable {
   status: string;
 }
 
+interface Branch {
+  id: string;
+  name: string;
+}
+
 interface Customer {
   id: string;
   name: string;
@@ -110,6 +115,40 @@ interface InvoiceHistoryItem {
   };
 }
 
+interface PosShift {
+  id: string;
+  status: 'OPEN' | 'CLOSED';
+  openingCash: number;
+  expectedCash?: number | null;
+  openedAt: string;
+  openedBy?: { name?: string } | null;
+}
+
+interface CashMovementItem {
+  id: string;
+  shiftId: string;
+  direction: 'IN' | 'OUT';
+  category: 'CHANGE' | 'PETTY_CASH' | 'REPLENISHMENT' | 'WITHDRAWAL' | 'DEPOSIT' | 'ADJUSTMENT' | 'OTHER';
+  amount: number;
+  reason: string;
+  notes?: string;
+  createdAt: string;
+  createdBy?: { id?: string; name?: string } | null;
+}
+
+interface CashState {
+  shift: PosShift | null;
+  movements: CashMovementItem[];
+  totals: {
+    openingCash: number;
+    cashSales: number;
+    cardSales: number;
+    totalCashIn: number;
+    totalCashOut: number;
+    expectedCash: number;
+  } | null;
+}
+
 function toAmount(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -129,6 +168,16 @@ function formatPaymentMethod(value?: string): string {
   if (value === 'mixed') return 'Mixto';
   if (value === 'transfer') return 'Transferencia';
   return 'No indicado';
+}
+
+function formatCashCategory(value: CashMovementItem['category']): string {
+  if (value === 'CHANGE') return 'Cambio';
+  if (value === 'PETTY_CASH') return 'Caja chica';
+  if (value === 'REPLENISHMENT') return 'Reposicion';
+  if (value === 'WITHDRAWAL') return 'Retiro';
+  if (value === 'DEPOSIT') return 'Deposito';
+  if (value === 'ADJUSTMENT') return 'Ajuste';
+  return 'Otro';
 }
 
 function printHistoryInvoice(invoice: InvoiceHistoryItem) {
@@ -234,7 +283,11 @@ function printHistoryInvoice(invoice: InvoiceHistoryItem) {
 
 export default function PosPage() {
   const { user, logout } = useAuthStore();
-  const branchId = user?.branchId ?? '';
+  const isSuperAdmin = user?.role === 'super_admin';
+  const canManageShift = ['super_admin', 'branch_admin', 'cashier'].includes(user?.role ?? '');
+  const initialQueryBranchId = new URLSearchParams(window.location.search).get('branchId') ?? '';
+  const [selectedBranchId, setSelectedBranchId] = useState(initialQueryBranchId);
+  const branchId = isSuperAdmin ? (selectedBranchId || user?.branchId || '') : (user?.branchId ?? '');
   const qc = useQueryClient();
   const settings = useSettings();
 
@@ -255,6 +308,19 @@ export default function PosPage() {
   const [cameraModalOpen, setCameraModalOpen] = useState(false);
   const [qrStatus, setQrStatus] = useState<'idle' | 'starting' | 'scanning' | 'found' | 'error'>('idle');
   const [detectedQrCode, setDetectedQrCode] = useState('');
+  const [shiftModalMode, setShiftModalMode] = useState<'open' | 'close' | null>(null);
+  const [openingCashInput, setOpeningCashInput] = useState('0');
+  const [closingCashInput, setClosingCashInput] = useState('0');
+  const [closingNotesInput, setClosingNotesInput] = useState('');
+  const [shiftError, setShiftError] = useState('');
+  const [cashMovementModalOpen, setCashMovementModalOpen] = useState(false);
+  const [cashMovementError, setCashMovementError] = useState('');
+  const [cashMovementDirection, setCashMovementDirection] = useState<'IN' | 'OUT'>('OUT');
+  const [cashMovementCategory, setCashMovementCategory] = useState<CashMovementItem['category']>('PETTY_CASH');
+  const [cashMovementAmount, setCashMovementAmount] = useState('0');
+  const [cashMovementReason, setCashMovementReason] = useState('');
+  const [cashMovementNotes, setCashMovementNotes] = useState('');
+  const [tablesModalOpen, setTablesModalOpen] = useState(false);
   const todayDate = toDateInputValue(new Date());
 
   // Camera QR scanning states
@@ -263,6 +329,34 @@ export default function PosPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ['pos-branches'],
+    queryFn: () => api.get('/branches').then((r) => r.data),
+    enabled: isSuperAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => {
+    if (!isSuperAdmin || selectedBranchId) return;
+    if (user?.branchId) {
+      setSelectedBranchId(user.branchId);
+      return;
+    }
+    if (branches.length > 0) {
+      setSelectedBranchId(branches[0].id);
+    }
+  }, [isSuperAdmin, selectedBranchId, user?.branchId, branches]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const params = new URLSearchParams(window.location.search);
+    if (branchId) params.set('branchId', branchId);
+    else params.delete('branchId');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [isSuperAdmin, branchId]);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['pos-categories', branchId],
@@ -296,6 +390,20 @@ export default function PosPage() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: currentShift, isLoading: currentShiftLoading } = useQuery<PosShift | null>({
+    queryKey: ['pos-current-shift', branchId],
+    queryFn: () => api.get(`/pos/shift/current?branchId=${branchId}`).then((r) => r.data).catch(() => null),
+    enabled: !!branchId && canManageShift,
+    refetchInterval: 15_000,
+  });
+
+  const { data: cashState } = useQuery<CashState>({
+    queryKey: ['pos-cash-state', branchId],
+    queryFn: () => api.get(`/pos/cash-movements?branchId=${branchId}`).then((r) => r.data),
+    enabled: !!branchId && canManageShift,
+    refetchInterval: 15_000,
+  });
+
   const { data: pendingOrders = [], isLoading: pendingOrdersLoading } = useQuery<PendingOrder[]>({
     queryKey: ['pos-pending-billing', branchId],
     queryFn: () =>
@@ -314,6 +422,14 @@ export default function PosPage() {
     queryFn: () => api.get(`/billing/invoices?branchId=${branchId}&from=${todayDate}&to=${todayDate}`).then((r) => r.data),
     enabled: !!branchId,
     refetchInterval: 30000,
+  });
+
+  const updateTableStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/tables/${id}/status?branchId=${branchId}`, { status }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pos-tables', branchId] });
+    },
   });
 
   const filteredInvoices = invoicesHistory.filter((inv) => {
@@ -518,6 +634,98 @@ export default function PosPage() {
     setShowBilling(true);
   };
 
+  const openShift = useMutation({
+    mutationFn: (openingCash: number) =>
+      api.post(`/pos/shift/open?branchId=${branchId}`, { openingCash }, { headers: { 'X-Silent-Error': '1' } }).then((r) => r.data),
+    onSuccess: () => {
+      setShiftError('');
+      setSuccessMsg('Caja abierta correctamente.');
+      setTimeout(() => setSuccessMsg(''), 2500);
+      setShiftModalMode(null);
+      qc.invalidateQueries({ queryKey: ['pos-current-shift', branchId] });
+      qc.invalidateQueries({ queryKey: ['pos-cash-state', branchId] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setShiftError(Array.isArray(msg) ? msg.join(' · ') : String(msg ?? 'No se pudo abrir la caja.'));
+    },
+  });
+
+  const closeShift = useMutation({
+    mutationFn: (payload: { closingCash: number; closingNotes?: string }) =>
+      api.post(`/pos/shift/close?branchId=${branchId}`, payload, { headers: { 'X-Silent-Error': '1' } }).then((r) => r.data),
+    onSuccess: () => {
+      setShiftError('');
+      setSuccessMsg('Caja cerrada correctamente.');
+      setTimeout(() => setSuccessMsg(''), 2500);
+      setShiftModalMode(null);
+      qc.invalidateQueries({ queryKey: ['pos-current-shift', branchId] });
+      qc.invalidateQueries({ queryKey: ['pos-cash-state', branchId] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setShiftError(Array.isArray(msg) ? msg.join(' · ') : String(msg ?? 'No se pudo cerrar la caja.'));
+    },
+  });
+
+  const createCashMovement = useMutation({
+    mutationFn: (payload: { direction: 'IN' | 'OUT'; category: CashMovementItem['category']; amount: number; reason: string; notes?: string }) =>
+      api.post(`/pos/cash-movements?branchId=${branchId}`, payload, { headers: { 'X-Silent-Error': '1' } }).then((r) => r.data),
+    onSuccess: () => {
+      setCashMovementError('');
+      setCashMovementModalOpen(false);
+      setCashMovementAmount('0');
+      setCashMovementReason('');
+      setCashMovementNotes('');
+      setSuccessMsg('Movimiento de caja registrado.');
+      setTimeout(() => setSuccessMsg(''), 2500);
+      qc.invalidateQueries({ queryKey: ['pos-cash-state', branchId] });
+      qc.invalidateQueries({ queryKey: ['pos-current-shift', branchId] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      setCashMovementError(Array.isArray(msg) ? msg.join(' · ') : String(msg ?? 'No se pudo registrar el movimiento.'));
+    },
+  });
+
+  const submitOpenShift = () => {
+    const openingCash = Number(openingCashInput);
+    if (!Number.isFinite(openingCash) || openingCash < 0) return;
+    setShiftError('');
+    openShift.mutate(openingCash);
+  };
+
+  const submitCloseShift = () => {
+    const closingCash = Number(closingCashInput);
+    if (!Number.isFinite(closingCash) || closingCash < 0) return;
+    setShiftError('');
+    closeShift.mutate({
+      closingCash,
+      closingNotes: closingNotesInput.trim() || undefined,
+    });
+  };
+
+  const submitCashMovement = () => {
+    const amount = Number(cashMovementAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setCashMovementError('Debes indicar un monto valido.');
+      return;
+    }
+    if (!cashMovementReason.trim()) {
+      setCashMovementError('Debes indicar un motivo para el movimiento.');
+      return;
+    }
+
+    setCashMovementError('');
+    createCashMovement.mutate({
+      direction: cashMovementDirection,
+      category: cashMovementCategory,
+      amount,
+      reason: cashMovementReason.trim(),
+      notes: cashMovementNotes.trim() || undefined,
+    });
+  };
+
   return (
     <>
       <BillingModal
@@ -539,6 +747,250 @@ export default function PosPage() {
           qc.invalidateQueries({ queryKey: ['pos-tables'] });
         }}
       />
+
+      {shiftModalMode && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">
+                {shiftModalMode === 'open' ? 'Apertura de caja' : 'Cierre de caja'}
+              </h3>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setShiftModalMode(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {shiftError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {shiftError}
+                </div>
+              )}
+
+              {shiftModalMode === 'open' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Efectivo inicial</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={openingCashInput}
+                      onChange={(e) => setOpeningCashInput(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={openShift.isPending}
+                    onClick={submitOpenShift}
+                    className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold py-2"
+                  >
+                    {openShift.isPending ? 'Abriendo...' : 'Abrir caja'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Apertura</p>
+                        <p className="font-semibold text-gray-800">
+                          {currentShift?.openedAt
+                            ? new Date(currentShift.openedAt).toLocaleString('es-CR')
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Cajero</p>
+                        <p className="font-semibold text-gray-800">{currentShift?.openedBy?.name || 'No identificado'}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Caja inicial</p>
+                        <p className="font-semibold text-gray-800">{formatCurrency(Number(currentShift?.openingCash ?? 0), settings)}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Ventas efectivo</p>
+                        <p className="font-semibold text-gray-800">{formatCurrency(Number(cashState?.totals?.cashSales ?? 0), settings)}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Ventas tarjeta</p>
+                        <p className="font-semibold text-gray-800">{formatCurrency(Number(cashState?.totals?.cardSales ?? 0), settings)}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Entradas manuales</p>
+                        <p className="font-semibold text-emerald-700">{formatCurrency(Number(cashState?.totals?.totalCashIn ?? 0), settings)}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Salidas manuales</p>
+                        <p className="font-semibold text-red-700">{formatCurrency(Number(cashState?.totals?.totalCashOut ?? 0), settings)}</p>
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+                        <p className="text-gray-500 uppercase tracking-wide">Esperado en caja</p>
+                        <p className="font-semibold text-gray-900">{formatCurrency(Number(cashState?.totals?.expectedCash ?? currentShift?.openingCash ?? 0), settings)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-gray-200 overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Movimientos recientes</h4>
+                      <span className="text-[11px] text-gray-400">{cashState?.movements?.length ?? 0} registrados</span>
+                    </div>
+                    <div className="max-h-48 overflow-auto divide-y divide-gray-100">
+                      {(cashState?.movements?.length ?? 0) === 0 && (
+                        <div className="px-3 py-4 text-xs text-gray-500">Aun no hay movimientos manuales en este turno.</div>
+                      )}
+                      {(cashState?.movements ?? []).slice(0, 8).map((movement) => (
+                        <div key={movement.id} className="px-3 py-2 flex items-start justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-800">
+                              {movement.direction === 'IN' ? 'Entrada' : 'Salida'} · {formatCashCategory(movement.category)}
+                            </p>
+                            <p className="text-gray-500 truncate">{movement.reason}</p>
+                            <p className="text-gray-400">{new Date(movement.createdAt).toLocaleString('es-CR')} · {movement.createdBy?.name || 'Usuario'}</p>
+                          </div>
+                          <span className={`font-semibold whitespace-nowrap ${movement.direction === 'IN' ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {movement.direction === 'IN' ? '+' : '-'}{formatCurrency(movement.amount, settings)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Efectivo contado al cierre</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={closingCashInput}
+                      onChange={(e) => setClosingCashInput(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Notas de cierre (opcional)</label>
+                    <textarea
+                      rows={3}
+                      value={closingNotesInput}
+                      onChange={(e) => setClosingNotesInput(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      placeholder="Observaciones de arqueo o incidencias"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={closeShift.isPending}
+                    onClick={submitCloseShift}
+                    className="w-full rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-semibold py-2"
+                  >
+                    {closeShift.isPending ? 'Cerrando...' : 'Cerrar caja'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cashMovementModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Movimiento de caja</h3>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setCashMovementModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {cashMovementError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {cashMovementError}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Tipo</label>
+                  <select
+                    value={cashMovementDirection}
+                    onChange={(e) => setCashMovementDirection(e.target.value as 'IN' | 'OUT')}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="IN">Entrada</option>
+                    <option value="OUT">Salida</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Categoria</label>
+                  <select
+                    value={cashMovementCategory}
+                    onChange={(e) => setCashMovementCategory(e.target.value as CashMovementItem['category'])}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="CHANGE">Cambio</option>
+                    <option value="PETTY_CASH">Caja chica</option>
+                    <option value="REPLENISHMENT">Reposicion</option>
+                    <option value="WITHDRAWAL">Retiro</option>
+                    <option value="DEPOSIT">Deposito</option>
+                    <option value="ADJUSTMENT">Ajuste</option>
+                    <option value="OTHER">Otro</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Monto</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={cashMovementAmount}
+                  onChange={(e) => setCashMovementAmount(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Motivo</label>
+                <input
+                  type="text"
+                  value={cashMovementReason}
+                  onChange={(e) => setCashMovementReason(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Ej: compra urgente, cambio, retiro"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Notas</label>
+                <textarea
+                  rows={3}
+                  value={cashMovementNotes}
+                  onChange={(e) => setCashMovementNotes(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Detalle adicional del movimiento"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={createCashMovement.isPending}
+                onClick={submitCashMovement}
+                className="w-full rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-semibold py-2"
+              >
+                {createCashMovement.isPending ? 'Registrando...' : 'Guardar movimiento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Camera QR Scanner Modal */}
       {cameraModalOpen && (
@@ -607,6 +1059,187 @@ export default function PosPage() {
         </div>
       )}
 
+      {/* Tables Modal */}
+      {tablesModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className={`w-full max-w-4xl rounded-2xl border shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col ${
+            settings.theme === 'dark'
+              ? 'bg-gray-800 border-gray-700'
+              : 'bg-white border-gray-200'
+          }`}>
+            <div className={`sticky top-0 px-6 py-4 border-b flex items-center justify-between ${
+              settings.theme === 'dark'
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-white border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-bold ${settings.theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>🪑 Gestión de mesas</h3>
+              <button
+                type="button"
+                className={`text-xl transition-colors ${
+                  settings.theme === 'dark'
+                    ? 'text-gray-400 hover:text-gray-300'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+                onClick={() => setTablesModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={settings.theme === 'dark' ? 'bg-gray-800 p-6' : 'bg-white p-6'}>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {tables.map((t: PosTable) => {
+                  const STATUS_COLORS_LIGHT: Record<string, string> = {
+                    free: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                    occupied: 'bg-red-100 text-red-700 border-red-200',
+                    waiting_food: 'bg-amber-100 text-amber-700 border-amber-200',
+                    bill_requested: 'bg-orange-100 text-orange-700 border-orange-200',
+                    reserved: 'bg-blue-100 text-blue-700 border-blue-200',
+                  };
+
+                  const STATUS_COLORS_DARK: Record<string, string> = {
+                    free: 'bg-emerald-900 text-emerald-200 border-emerald-700',
+                    occupied: 'bg-red-900 text-red-200 border-red-700',
+                    waiting_food: 'bg-amber-900 text-amber-200 border-amber-700',
+                    bill_requested: 'bg-orange-900 text-orange-200 border-orange-700',
+                    reserved: 'bg-blue-900 text-blue-200 border-blue-700',
+                  };
+
+                  const STATUS_COLORS = settings.theme === 'dark' ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
+
+                  const STATUS_LABELS: Record<string, string> = {
+                    free: 'Libre',
+                    occupied: 'Ocupada',
+                    waiting_food: 'Esperando comida',
+                    bill_requested: 'Pide la cuenta',
+                    reserved: 'Reservada',
+                  };
+
+                  const STATUS_EMOJIS: Record<string, string> = {
+                    free: '✓',
+                    occupied: '👥',
+                    waiting_food: '⏱️',
+                    bill_requested: '💳',
+                    reserved: '📌',
+                  };
+
+                  const status = String(t.status).toLowerCase();
+                  const isSelected = tableId === t.id;
+                  const colorClass = STATUS_COLORS[status] || (settings.theme === 'dark' ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200');
+
+                  return (
+                    <div
+                      key={t.id}
+                      className={`rounded-xl border-2 p-3 transition-all ${
+                        isSelected
+                          ? settings.theme === 'dark'
+                            ? 'border-brand-600 bg-brand-900'
+                            : 'border-brand-600 bg-brand-50'
+                          : settings.theme === 'dark'
+                            ? 'border-gray-700 hover:border-gray-600'
+                            : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="mb-2">
+                        <p className={`text-base font-bold ${settings.theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>🪑 Mesa {t.number}</p>
+                      </div>
+                      <div className="mb-2">
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-bold border ${colorClass}`}>
+                          {STATUS_EMOJIS[status]} {STATUS_LABELS[status] || status}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (status === 'free' || status === 'reserved') {
+                            setTableId(t.id);
+                            setTablesModalOpen(false);
+                          }
+                        }}
+                        disabled={status !== 'free' && status !== 'reserved'}
+                        className={`w-full text-xs py-1.5 rounded-lg font-semibold transition-colors ${
+                          isSelected
+                            ? 'bg-brand-600 text-white'
+                            : status === 'free' || status === 'reserved'
+                              ? settings.theme === 'dark'
+                                ? 'bg-brand-900 text-brand-200 hover:bg-brand-800'
+                                : 'bg-brand-100 text-brand-700 hover:bg-brand-200'
+                              : settings.theme === 'dark'
+                                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isSelected ? '✓ Seleccionada' : 'Seleccionar'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Acciones rápidas</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {tables.map((t: PosTable) => {
+                    const status = String(t.status).toLowerCase();
+                    return (
+                      <div key={t.id} className="space-y-1">
+                        {status === 'occupied' && (
+                          <button
+                            onClick={() => updateTableStatus.mutate({ id: t.id, status: 'bill_requested' })}
+                            className={`w-full text-xs py-1 border rounded-lg transition-colors font-semibold ${
+                              settings.theme === 'dark'
+                                ? 'border-orange-700 text-orange-300 hover:bg-orange-900'
+                                : 'border-orange-300 text-orange-600 hover:bg-orange-50'
+                            }`}
+                          >
+                            Mesa {t.number}: Pedir cuenta
+                          </button>
+                        )}
+                        {(status === 'bill_requested' || status === 'waiting_food') && (
+                          <button
+                            onClick={() => updateTableStatus.mutate({ id: t.id, status: 'free' })}
+                            className={`w-full text-xs py-1 border rounded-lg transition-colors font-semibold ${
+                              settings.theme === 'dark'
+                                ? 'border-emerald-700 text-emerald-300 hover:bg-emerald-900'
+                                : 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                          >
+                            Mesa {t.number}: Liberar
+                          </button>
+                        )}
+                        {status === 'free' && (
+                          <button
+                            onClick={() => updateTableStatus.mutate({ id: t.id, status: 'reserved' })}
+                            className={`w-full text-xs py-1 border rounded-lg transition-colors font-semibold ${
+                              settings.theme === 'dark'
+                                ? 'border-blue-700 text-blue-300 hover:bg-blue-900'
+                                : 'border-blue-300 text-blue-600 hover:bg-blue-50'
+                            }`}
+                          >
+                            Mesa {t.number}: Reservar
+                          </button>
+                        )}
+                        {status === 'reserved' && (
+                          <button
+                            onClick={() => updateTableStatus.mutate({ id: t.id, status: 'free' })}
+                            className={`w-full text-xs py-1 border rounded-lg transition-colors font-semibold ${
+                              settings.theme === 'dark'
+                                ? 'border-slate-600 text-slate-300 hover:bg-slate-700'
+                                : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            Mesa {t.number}: Cancelar reserva
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className={`flex h-screen overflow-hidden flex-col xl:flex-row ${settings.theme === 'dark' ? 'dark' : ''}`}>
         <div className="xl:hidden bg-white border-b border-gray-200 p-2">
           <div className="grid grid-cols-2 gap-2">
@@ -632,9 +1265,77 @@ export default function PosPage() {
         <div
           className={`${mobileSection === 'orders' ? 'flex' : 'hidden'} xl:flex flex-1 xl:flex-[2] min-w-0 min-h-0 flex-col overflow-hidden xl:border-r border-gray-200`}
         >
-          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
             <span className="font-bold text-lg">POS</span>
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sucursal</span>
+                <select
+                  value={branchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Seleccionar...</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex gap-2">
+              {canManageShift && (
+                <>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold ${
+                      currentShift
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {currentShiftLoading ? 'Caja...' : currentShift ? 'Caja abierta' : 'Caja cerrada'}
+                  </span>
+                  {currentShift && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCashMovementDirection('OUT');
+                        setCashMovementCategory('PETTY_CASH');
+                        setCashMovementAmount('0');
+                        setCashMovementReason('');
+                        setCashMovementNotes('');
+                        setCashMovementError('');
+                        setCashMovementModalOpen(true);
+                      }}
+                      className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    >
+                      Movimiento caja
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={currentShiftLoading}
+                    onClick={() => {
+                      if (currentShift) {
+                        setClosingCashInput(String(toAmount(cashState?.totals?.expectedCash ?? currentShift.openingCash)));
+                        setClosingNotesInput('');
+                        setShiftError('');
+                        setShiftModalMode('close');
+                        return;
+                      }
+                      setOpeningCashInput('0');
+                      setShiftError('');
+                      setShiftModalMode('open');
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      currentShift
+                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                        : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                    }`}
+                  >
+                    {currentShift ? 'Cerrar caja' : 'Abrir caja'}
+                  </button>
+                </>
+              )}
               {['DINE_IN', 'TO_GO', 'DELIVERY'].map((t) => (
                 <button
                   key={t}
@@ -728,39 +1429,39 @@ export default function PosPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          type="text"
-                          value={customerSearchCode}
-                          onChange={(e) => {
-                            setCustomerSearchCode(e.target.value);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && customerSearchCode.trim()) {
-                              searchCustomer.mutate(customerSearchCode);
-                            }
-                          }}
-                          placeholder="Código cliente o número"
-                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        />
+                      <input
+                        type="text"
+                        value={customerSearchCode}
+                        onChange={(e) => {
+                          setCustomerSearchCode(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && customerSearchCode.trim()) {
+                            searchCustomer.mutate(customerSearchCode);
+                          }
+                        }}
+                        placeholder="Código cliente o número"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                      <div className="flex gap-2">
                         <button
                           onClick={() => searchCustomer.mutate(customerSearchCode)}
                           disabled={!customerSearchCode.trim() || searchCustomer.isPending}
-                          className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors sm:w-auto"
+                          className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors flex-1"
                         >
                           🔍 Buscar
                         </button>
+                        <button
+                          onClick={() => (cameraModalOpen ? stopCamera() : startCamera())}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-1 ${
+                            cameraModalOpen 
+                              ? 'bg-red-600 hover:bg-red-700' 
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {cameraModalOpen ? '✕ Cerrar' : '📷 QR'}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => (cameraModalOpen ? stopCamera() : startCamera())}
-                        className={`w-full py-2.5 rounded-lg text-sm font-medium text-white transition-colors ${
-                          cameraModalOpen 
-                            ? 'bg-red-600 hover:bg-red-700' 
-                            : 'bg-blue-600 hover:bg-blue-700'
-                        }`}
-                      >
-                        {cameraModalOpen ? '✕ Cerrar cámara' : '📷 Escanear QR'}
-                      </button>
                       {searchCustomer.isPending && (
                         <p className="text-xs text-gray-500">Buscando...</p>
                       )}
@@ -773,19 +1474,31 @@ export default function PosPage() {
 
                 {orderType === 'DINE_IN' && (
                   <>
-                    <select
-                      value={tableId}
-                      onChange={(e) => setTableId(e.target.value)}
-                      className="mt-2 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                      <option value="">Seleccionar mesa...</option>
-                      {freeTables.map((t) => (
-                        <option key={t.id} value={t.id}>Mesa {t.number}</option>
-                      ))}
-                    </select>
-                    {freeTables.length === 0 && (
-                      <p className="text-xs text-amber-600 mt-2">No hay mesas libres en este momento.</p>
-                    )}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Seleccionar mesa</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={tableId}
+                          onChange={(e) => setTableId(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        >
+                          <option value="">Seleccionar mesa...</option>
+                          {freeTables.map((t) => (
+                            <option key={t.id} value={t.id}>Mesa {t.number}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => setTablesModalOpen(true)}
+                          className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-semibold transition-colors flex-shrink-0"
+                          title="Ver estado de todas las mesas"
+                        >
+                          🪑 Ver mesas
+                        </button>
+                      </div>
+                      {freeTables.length === 0 && (
+                        <p className="text-xs text-amber-600 mt-2">No hay mesas libres en este momento.</p>
+                      )}
+                    </div>
                   </>
                 )}
 

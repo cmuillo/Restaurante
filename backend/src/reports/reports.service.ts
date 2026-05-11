@@ -5,6 +5,8 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Invoice } from '../billing/entities/invoice.entity';
 import { Expense } from '../expenses/entities/expense.entity';
 import { Category } from '../menu/entities/category.entity';
+import { PosShift } from '../pos/entities/pos-shift.entity';
+import { CashMovementDirection, PosCashMovement } from '../pos/entities/pos-cash-movement.entity';
 
 @Injectable()
 export class ReportsService {
@@ -13,6 +15,8 @@ export class ReportsService {
     @InjectRepository(Invoice) private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(Expense) private readonly expenseRepository: Repository<Expense>,
     @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(PosShift) private readonly shiftRepository: Repository<PosShift>,
+    @InjectRepository(PosCashMovement) private readonly cashMovementRepository: Repository<PosCashMovement>,
   ) {}
 
   private normalizeDateRange(from: Date, to: Date): { fromStart: Date; toExclusive: Date } {
@@ -288,5 +292,78 @@ export class ReportsService {
         ? +((parseFloat(r.total_revenue ?? '0') / grandTotal) * 100).toFixed(1)
         : 0,
     }));
+  }
+
+  async cashMovements(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
+    const movements = await this.cashMovementRepository
+      .createQueryBuilder('movement')
+      .leftJoinAndSelect('movement.createdBy', 'createdBy')
+      .leftJoinAndSelect('movement.shift', 'shift')
+      .where('movement.branchId = :branchId', { branchId })
+      .andWhere('movement.createdAt >= :from', { from: fromStart })
+      .andWhere('movement.createdAt < :to', { to: toExclusive })
+      .orderBy('movement.createdAt', 'DESC')
+      .getMany();
+
+    return movements.map((movement) => ({
+      id: movement.id,
+      createdAt: movement.createdAt,
+      shiftId: movement.shiftId,
+      direction: movement.direction,
+      category: movement.category,
+      amount: Number(movement.amount),
+      reason: movement.reason,
+      notes: movement.notes,
+      createdBy: movement.createdBy ? { id: movement.createdBy.id, name: movement.createdBy.name } : null,
+    }));
+  }
+
+  async cashShifts(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
+    const shifts = await this.shiftRepository
+      .createQueryBuilder('shift')
+      .leftJoinAndSelect('shift.openedBy', 'openedBy')
+      .leftJoinAndSelect('shift.closedBy', 'closedBy')
+      .where('shift.branchId = :branchId', { branchId })
+      .andWhere('shift.openedAt >= :from', { from: fromStart })
+      .andWhere('shift.openedAt < :to', { to: toExclusive })
+      .orderBy('shift.openedAt', 'DESC')
+      .getMany();
+
+    const movementRows = await this.cashMovementRepository
+      .createQueryBuilder('movement')
+      .select('movement.shiftId', 'shiftId')
+      .addSelect('movement.direction', 'direction')
+      .addSelect('COALESCE(SUM(movement.amount), 0)', 'total')
+      .where('movement.branchId = :branchId', { branchId })
+      .andWhere('movement.createdAt >= :from', { from: fromStart })
+      .andWhere('movement.createdAt < :to', { to: toExclusive })
+      .groupBy('movement.shiftId')
+      .addGroupBy('movement.direction')
+      .getRawMany();
+
+    return shifts.map((shift) => {
+      const totalCashIn = parseFloat(movementRows.find((row) => row.shiftId === shift.id && row.direction === CashMovementDirection.IN)?.total ?? '0');
+      const totalCashOut = parseFloat(movementRows.find((row) => row.shiftId === shift.id && row.direction === CashMovementDirection.OUT)?.total ?? '0');
+
+      return {
+        id: shift.id,
+        status: shift.status,
+        openedAt: shift.openedAt,
+        closedAt: shift.closedAt,
+        openingCash: Number(shift.openingCash),
+        closingCash: shift.closingCash != null ? Number(shift.closingCash) : null,
+        expectedCash: shift.expectedCash != null ? Number(shift.expectedCash) : null,
+        cashDifference: shift.cashDifference != null ? Number(shift.cashDifference) : null,
+        manualCashIn: totalCashIn,
+        manualCashOut: totalCashOut,
+        closingNotes: shift.closingNotes,
+        openedBy: shift.openedBy ? { id: shift.openedBy.id, name: shift.openedBy.name } : null,
+        closedBy: shift.closedBy ? { id: shift.closedBy.id, name: shift.closedBy.name } : null,
+      };
+    });
   }
 }

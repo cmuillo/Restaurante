@@ -6,6 +6,18 @@ import { BranchConfig } from './entities/branch-config.entity';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 
+function defaultBusinessHours() {
+  return {
+    monday: { open: '06:00', close: '22:00', closed: false },
+    tuesday: { open: '06:00', close: '22:00', closed: false },
+    wednesday: { open: '06:00', close: '22:00', closed: false },
+    thursday: { open: '06:00', close: '22:00', closed: false },
+    friday: { open: '06:00', close: '22:00', closed: false },
+    saturday: { open: '06:00', close: '22:00', closed: false },
+    sunday: { open: '06:00', close: '22:00', closed: false },
+  };
+}
+
 @Injectable()
 export class BranchesService {
   constructor(
@@ -18,7 +30,10 @@ export class BranchesService {
     const saved = await this.branchRepository.save(branch);
 
     // Crear configuración por defecto
-    await this.configRepository.save({ branchId: saved.id });
+    await this.configRepository.save({
+      branchId: saved.id,
+      businessHours: defaultBusinessHours(),
+    });
 
     return saved;
   }
@@ -45,6 +60,12 @@ export class BranchesService {
   async getConfig(branchId: string): Promise<BranchConfig> {
     const config = await this.configRepository.findOne({ where: { branchId } });
     if (!config) throw new NotFoundException('Configuración de sucursal no encontrada');
+
+    if (!config.businessHours) {
+      config.businessHours = defaultBusinessHours();
+      await this.configRepository.save(config);
+    }
+
     return config;
   }
 

@@ -9,9 +9,10 @@ import { Product } from '../menu/entities/product.entity';
 import { AuditModule } from '../audit/audit.module';
 import { HaciendaModule } from '../hacienda/hacienda.module';
 import { CustomersModule } from '../customers/customers.module';
+import { WebsocketsModule } from '../websockets/websockets.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig, Product]), AuditModule, HaciendaModule, CustomersModule],
+  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig, Product]), AuditModule, HaciendaModule, CustomersModule, WebsocketsModule],
   controllers: [BillingController],
   providers: [BillingService],
   exports: [BillingService],

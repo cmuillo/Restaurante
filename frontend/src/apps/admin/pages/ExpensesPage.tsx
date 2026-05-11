@@ -4,11 +4,13 @@ import api from '../../../lib/api';
 import { useActiveBranchId } from '../../../hooks/useActiveBranchId';
 import { useSettings } from '../../../hooks/useSettings';
 import { formatCurrency } from '../../../stores/settings.store';
+import { useAuthStore } from '../../../stores/auth.store';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type Expense = {
   id: string;
+  branchId: string;
   category: string;
   description: string;
   amount: number;
@@ -22,9 +24,27 @@ type Expense = {
   isDeductible?: boolean;
   notes?: string;
   createdAt: string;
+  branch?: { id: string; name: string };
 };
 
 type CategorySummary = { category: string; total: string; totalIva: string };
+type Branch = { id: string; name: string };
+type ExpenseInboxItem = {
+  id: string;
+  sourceEmail?: string;
+  subject?: string;
+  receivedAt: string;
+  supplierName?: string;
+  supplierTaxId?: string;
+  receiptNumber?: string;
+  issueDate?: string;
+  amount: number;
+  ivaAmount: number;
+  totalAmount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  branchId?: string;
+  branch?: { id: string; name: string };
+};
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -146,7 +166,7 @@ function monthStartStr() {
 
 type XmlParseState = 'idle' | 'ok' | 'error';
 
-type FormData = Omit<Expense, 'id' | 'createdAt'>;
+type FormData = Omit<Expense, 'id' | 'createdAt' | 'branchId' | 'branch'>;
 
 const EMPTY_FORM: FormData = {
   category: 'SUPPLIES',
@@ -408,10 +428,15 @@ function ExpenseModal({
 
 export default function ExpensesPage() {
   const branchId = useActiveBranchId();
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === 'super_admin';
   const settings = useSettings();
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<'list' | 'summary'>('list');
+  const [branchFilter, setBranchFilter] = useState<'all' | string>('all');
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxBranchSelection, setInboxBranchSelection] = useState<Record<string, string>>({});
   const [from, setFrom] = useState(monthStartStr());
   const [to, setTo] = useState(todayStr());
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -420,19 +445,40 @@ export default function ExpensesPage() {
   const [modal, setModal] = useState<null | 'create' | Expense>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
 
+  const effectiveBranchFilter = isSuperAdmin ? branchFilter : branchId;
+  const expenseBranchQuery = effectiveBranchFilter && effectiveBranchFilter !== 'all'
+    ? `branchId=${effectiveBranchFilter}`
+    : '';
+  const dateQuery = `from=${from}&to=${to}`;
+  const listQuery = expenseBranchQuery ? `${expenseBranchQuery}&${dateQuery}` : dateQuery;
+  const mutationBranchId = (branchFilter === 'all' ? branchId : branchFilter) || branchId;
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ['branches'],
+    queryFn: () => api.get('/branches').then((r) => r.data),
+    enabled: isSuperAdmin,
+  });
+
   // ── Queries ──────────────────────────────────────────────────────────────
   const { data: expenses = [], isFetching } = useQuery<Expense[]>({
-    queryKey: ['expenses', branchId, from, to],
+    queryKey: ['expenses', effectiveBranchFilter, from, to],
     queryFn: () =>
-      api.get(`/expenses?branchId=${branchId}&from=${from}&to=${to}`).then((r) => r.data),
-    enabled: !!branchId,
+      api.get(`/expenses?${listQuery}`).then((r) => r.data),
+    enabled: !!from && !!to && (!!effectiveBranchFilter || isSuperAdmin),
   });
 
   const { data: summary = [] } = useQuery<CategorySummary[]>({
-    queryKey: ['expenses-summary', branchId, from, to],
+    queryKey: ['expenses-summary', effectiveBranchFilter, from, to],
     queryFn: () =>
-      api.get(`/expenses/summary?branchId=${branchId}&from=${from}&to=${to}`).then((r) => r.data),
-    enabled: !!branchId && tab === 'summary',
+      api.get(`/expenses/summary?${listQuery}`).then((r) => r.data),
+    enabled: !!from && !!to && (!!effectiveBranchFilter || isSuperAdmin) && tab === 'summary',
+  });
+
+  const inboxBranchQuery = expenseBranchQuery ? `&${expenseBranchQuery}` : '';
+  const { data: inboxItems = [], isFetching: isFetchingInbox } = useQuery<ExpenseInboxItem[]>({
+    queryKey: ['expenses-inbox', effectiveBranchFilter],
+    queryFn: () => api.get(`/expenses/inbox?status=pending${inboxBranchQuery}`).then((r) => r.data),
+    enabled: inboxOpen,
   });
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -443,20 +489,29 @@ export default function ExpensesPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: FormData) =>
-      api.post(`/expenses?branchId=${branchId}`, data).then((r) => r.data),
+      api.post(`/expenses?branchId=${mutationBranchId}`, data).then((r) => r.data),
     onSuccess: () => { invalidate(); setModal(null); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<FormData> }) =>
-      api.patch(`/expenses/${id}?branchId=${branchId}`, data).then((r) => r.data),
+      api.patch(`/expenses/${id}?branchId=${(modal && modal !== 'create' ? modal.branchId : mutationBranchId)}`, data).then((r) => r.data),
     onSuccess: () => { invalidate(); setModal(null); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      api.delete(`/expenses/${id}?branchId=${branchId}`),
+      api.delete(`/expenses/${id}?branchId=${deleteTarget?.branchId ?? mutationBranchId}`),
     onSuccess: () => { invalidate(); setDeleteTarget(null); },
+  });
+
+  const approveInboxMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { branchId?: string } }) =>
+      api.post(`/expenses/inbox/${id}/approve`, payload).then((r) => r.data),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['expenses-inbox'] });
+    },
   });
 
   // ── Filtros locales ───────────────────────────────────────────────────────
@@ -507,16 +562,40 @@ export default function ExpensesPage() {
           <h1 className="text-2xl font-bold text-gray-800">Gastos</h1>
           <p className="text-sm text-gray-500">Registro y control de gastos operativos</p>
         </div>
-        <button
-          onClick={() => setModal('create')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
-        >
-          + Nuevo gasto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setInboxOpen(true)}
+            className="px-4 py-2 rounded-lg border text-sm font-medium text-blue-700 border-blue-200 bg-blue-50 hover:bg-blue-100"
+          >
+            Bandeja correo
+          </button>
+          <button
+            onClick={() => setModal('create')}
+            disabled={!mutationBranchId}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+          >
+            + Nuevo gasto
+          </button>
+        </div>
       </div>
 
       {/* Filtros de fecha */}
       <div className="bg-white rounded-xl border p-4 flex flex-wrap gap-3 items-end">
+        {isSuperAdmin && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Sucursal</label>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="border rounded-lg px-3 py-1.5 text-sm min-w-[220px]"
+            >
+              <option value="all">Todas las sucursales</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Desde</label>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm" />
@@ -616,6 +695,7 @@ export default function ExpensesPage() {
                     <th className="px-4 py-3 text-left">Fecha</th>
                     <th className="px-4 py-3 text-left">Categoría</th>
                     <th className="px-4 py-3 text-left">Descripción</th>
+                    {isSuperAdmin && branchFilter === 'all' && <th className="px-4 py-3 text-left">Sucursal</th>}
                     <th className="px-4 py-3 text-left">Proveedor</th>
                     <th className="px-4 py-3 text-left">Comprobante</th>
                     <th className="px-4 py-3 text-right">Neto</th>
@@ -636,6 +716,9 @@ export default function ExpensesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 max-w-[180px] truncate" title={e.description}>{e.description}</td>
+                      {isSuperAdmin && branchFilter === 'all' && (
+                        <td className="px-4 py-3 text-gray-600">{e.branch?.name ?? '—'}</td>
+                      )}
                       <td className="px-4 py-3 text-gray-600">
                         {e.supplierName ? (
                           <div>
@@ -677,7 +760,7 @@ export default function ExpensesPage() {
                 </tbody>
                 <tfoot className="bg-gray-50 font-semibold text-gray-700 border-t">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 text-right text-xs text-gray-500">TOTALES ({filtered.length} registros)</td>
+                    <td colSpan={isSuperAdmin && branchFilter === 'all' ? 6 : 5} className="px-4 py-3 text-right text-xs text-gray-500">TOTALES ({filtered.length} registros)</td>
                     <td className="px-4 py-3 text-right">{fmt(totalNeto)}</td>
                     <td className="px-4 py-3 text-right text-yellow-600">{fmt(totalIva)}</td>
                     <td className="px-4 py-3 text-right text-red-600">{fmt(totalBruto)}</td>
@@ -814,6 +897,100 @@ export default function ExpensesPage() {
               >
                 {deleteMutation.isPending ? 'Eliminando…' : 'Eliminar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inboxOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[85vh] overflow-hidden">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Bandeja de facturas por correo</h3>
+                <p className="text-sm text-gray-500">Resumen detectado de XML adjuntos pendientes de aprobación.</p>
+              </div>
+              <button onClick={() => setInboxOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+
+            <div className="overflow-auto max-h-[68vh]">
+              {isFetchingInbox && <div className="p-6 text-sm text-gray-500">Cargando bandeja…</div>}
+
+              {!isFetchingInbox && inboxItems.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  <p className="text-3xl mb-2">📭</p>
+                  <p>No hay facturas pendientes en la bandeja de correo.</p>
+                </div>
+              )}
+
+              {!isFetchingInbox && inboxItems.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Recibida</th>
+                      <th className="px-4 py-3 text-left">Proveedor</th>
+                      <th className="px-4 py-3 text-left">Comprobante</th>
+                      <th className="px-4 py-3 text-left">Resumen</th>
+                      <th className="px-4 py-3 text-left">Remitente</th>
+                      <th className="px-4 py-3 text-right">Total</th>
+                      <th className="px-4 py-3 text-left">Sucursal</th>
+                      <th className="px-4 py-3 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {inboxItems.map((item) => {
+                      const selectedBranch = inboxBranchSelection[item.id] || item.branchId || '';
+                      const canApprove = isSuperAdmin ? !!selectedBranch : true;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                            {item.receivedAt?.slice(0, 16).replace('T', ' ') || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-700">{item.supplierName || 'Sin nombre'}</div>
+                            {item.supplierTaxId && <div className="text-xs text-gray-400">{item.supplierTaxId}</div>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {item.receiptNumber || '—'}
+                            {item.issueDate && <div className="text-xs text-gray-400">{item.issueDate}</div>}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 max-w-[280px]">
+                            <div className="truncate" title={item.subject || ''}>{item.subject || 'Sin asunto'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{item.sourceEmail || '—'}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-700">
+                            {fmt(Number(item.totalAmount || 0))}
+                          </td>
+                          <td className="px-4 py-3">
+                            {isSuperAdmin ? (
+                              <select
+                                value={selectedBranch}
+                                onChange={(e) => setInboxBranchSelection((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                                className="border rounded-lg px-2 py-1.5 text-xs min-w-[180px]"
+                              >
+                                <option value="">Seleccionar sucursal</option>
+                                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                              </select>
+                            ) : (
+                              <span className="text-gray-600 text-xs">{item.branch?.name || 'Sucursal actual'}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              disabled={!canApprove || approveInboxMutation.isPending}
+                              onClick={() => approveInboxMutation.mutate({ id: item.id, payload: { branchId: selectedBranch } })}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              Aprobar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

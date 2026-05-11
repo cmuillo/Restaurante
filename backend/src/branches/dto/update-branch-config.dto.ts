@@ -1,5 +1,11 @@
-import { IsOptional, IsNumber, IsString, IsBoolean, IsInt, Min, Max, MaxLength } from 'class-validator';
+import { IsOptional, IsNumber, IsString, IsBoolean, IsInt, Min, Max, MaxLength, IsObject } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
+type BusinessHour = {
+  open: string;
+  close: string;
+  closed: boolean;
+};
 
 export class UpdateBranchConfigDto {
   @ApiProperty({ required: false })
@@ -57,4 +63,9 @@ export class UpdateBranchConfigDto {
   @IsInt()
   @Min(10)
   kioskInactivitySeconds?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsObject()
+  businessHours?: Record<string, BusinessHour>;
 }

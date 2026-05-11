@@ -80,28 +80,30 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
       </div>
 
       {/* Productos */}
-      <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-3">
-        {filtered.map((p) => {
-          const salePrice = p.price * (1 + (p.taxRate ?? 0) / 100);
-          return (
-            <button
-              key={p.id}
-              onClick={() => selectProduct(p.id)}
-              className="aspect-square relative overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 hover:border-brand-500 active:scale-95 transition-all text-left"
-            >
-              {p.imageUrl ? (
-                <img src={p.imageUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-5xl bg-gray-800">🍽️</div>
-              )}
-              {/* Gradient overlay */}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-8 pb-3 px-3">
-                <p className="text-sm font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
-                <p className="text-base font-bold text-brand-400 mt-0.5">{formatCurrency(salePrice, settings)}</p>
-              </div>
-            </button>
-          );
-        })}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max">
+          {filtered.map((p) => {
+            const salePrice = p.price * (1 + (p.taxRate ?? 0) / 100);
+            return (
+              <button
+                key={p.id}
+                onClick={() => selectProduct(p.id)}
+                className="aspect-square relative overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 hover:border-brand-500 active:scale-95 transition-all text-left group"
+              >
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-5xl bg-gray-800">🍽️</div>
+                )}
+                {/* Gradient overlay */}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-8 pb-3 px-3">
+                  <p className="text-sm font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
+                  <p className="text-base font-bold text-brand-400 mt-0.5">{formatCurrency(salePrice, settings)}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

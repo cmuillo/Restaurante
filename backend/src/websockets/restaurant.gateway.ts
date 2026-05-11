@@ -90,6 +90,11 @@ export class RestaurantGateway
     this.server.to(`branch:${branchId}`).emit('order:status_updated', order);
   }
 
+  /** Actualización de una mesa */
+  emitTableUpdated(branchId: string, table: Record<string, unknown>) {
+    this.server.to(`branch:${branchId}`).emit('table:updated', table);
+  }
+
   /** Alerta de stock bajo enviada a admins */
   emitLowStockAlert(branchId: string, item: Record<string, unknown>) {
     this.server.to(`branch:${branchId}`).emit('inventory:low_stock', item);
