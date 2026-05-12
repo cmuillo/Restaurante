@@ -35,47 +35,87 @@ type CabysCatalogItem = {
   suggestedUnitOfMeasure: string;
 };
 
-const CABYS_CATALOG: CabysCatalogItem[] = [
-  { code: '5017189901000', name: 'Bebidas no alcoholicas preparadas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5017190101000', name: 'Cafe preparado para consumo', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5019260101000', name: 'Jugos naturales preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5019270101000', name: 'Batidos y mezclas de frutas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5019280101000', name: 'Gaseosas y bebidas carbonatadas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Unid' },
-  { code: '5019290101000', name: 'Bebidas calientes no alcoholicas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020170101000', name: 'Postres preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020180101000', name: 'Panaderia y reposteria preparada', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020230101000', name: 'Comidas rapidas preparadas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020240101000', name: 'Platos fuertes preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020250101000', name: 'Entradas y bocadillos preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020260101000', name: 'Sopas y cremas preparadas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020280101000', name: 'Ensaladas preparadas', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020300101000', name: 'Salsas y aderezos preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
-  { code: '5020320101000', name: 'Helados y productos congelados preparados', suggestedTaxRate: 13, suggestedTaxCode: '01', suggestedUnitOfMeasure: 'Sp' },
+const CABYS_FALLBACK: CabysCatalogItem[] = [
+  {
+    code: '561101',
+    name: 'Restaurantes con servicio completo',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
+  {
+    code: '561102',
+    name: 'Restaurantes con servicio limitado',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
+  {
+    code: '561103',
+    name: 'Bares, cantinas, discotecas',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
+  {
+    code: '561104',
+    name: 'Cafeterias y restaurantes de comida rapida',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
+  {
+    code: '561105',
+    name: 'Panaderia y confiteria',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
+  {
+    code: '561106',
+    name: 'Otros servicios de alimentacion',
+    suggestedTaxRate: 13,
+    suggestedTaxCode: '01',
+    suggestedUnitOfMeasure: 'Sp',
+  },
 ];
 
 function Modal({
   title,
+  icon,
   onClose,
   children,
   size = 'md',
 }: {
   title: string;
+  icon?: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
   size?: 'md' | 'xl';
 }) {
-  const widthClass = size === 'xl' ? 'max-w-5xl' : 'max-w-md';
+  const widthClass = size === 'xl' ? 'max-w-5xl' : 'max-w-xl';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className={`bg-white rounded-2xl shadow-xl w-full ${widthClass} max-h-[92vh] overflow-hidden m-4`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 px-6 pt-6">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className={`bg-[var(--color-bg-secondary,#1e2435)] border border-white/10 rounded-2xl shadow-2xl w-full ${widthClass} max-h-[92vh] overflow-hidden m-4`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10">
+          {icon && (
+            <div className="w-9 h-9 rounded-xl bg-brand-600/20 flex items-center justify-center text-brand-400 text-lg flex-shrink-0">
+              {icon}
+            </div>
+          )}
+          <h3 className="text-base font-semibold text-white flex-1">{title}</h3>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-lg leading-none"
+          >
+            &times;
+          </button>
         </div>
-        <div className="px-6 pb-6 overflow-y-auto max-h-[78vh]">
-          {children}
-        </div>
+        <div className="px-6 py-5 overflow-y-auto max-h-[78vh]">{children}</div>
       </div>
     </div>
   );
@@ -84,7 +124,7 @@ function Modal({
 export default function MenuPage() {
   const branchId = useActiveBranchId();
   const qc = useQueryClient();
-    const settings = useSettings();
+  const settings = useSettings();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
 
@@ -132,6 +172,24 @@ export default function MenuPage() {
       api.get(`/menu/products?branchId=${branchId}${activeCategory ? `&categoryId=${activeCategory}` : ''}`).then((r) => r.data),
     enabled: !!branchId,
   });
+
+  const { data: cabysCatalog = [] } = useQuery<CabysCatalogItem[]>({
+    queryKey: ['cabysCatalog', cabysQuery],
+    queryFn: () =>
+      api
+        .get(`/hacienda/cabys-codes?search=${encodeURIComponent(cabysQuery)}`)
+        .then((res) => res.data),
+    enabled: showProdModal,
+  });
+
+  const filteredCabys = useMemo(() => {
+    const source = cabysCatalog.length > 0 ? cabysCatalog : CABYS_FALLBACK;
+    const q = cabysQuery.trim().toLowerCase();
+    if (!q) return source;
+    return source.filter((item) =>
+      item.code.includes(q) || item.name.toLowerCase().includes(q),
+    );
+  }, [cabysCatalog, cabysQuery]);
 
   const saveCat = useMutation({
     mutationFn: (data: object) =>
@@ -256,14 +314,6 @@ export default function MenuPage() {
     setProdFieldErrors({});
     setShowProdModal(true);
   }
-
-  const cabysSuggestions = useMemo(() => {
-    const q = cabysQuery.trim().toLowerCase();
-    if (!q) return CABYS_CATALOG.slice(0, 8);
-    return CABYS_CATALOG
-      .filter((c) => c.code.includes(q) || c.name.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [cabysQuery]);
 
   function applyCabysSuggestion(item: CabysCatalogItem) {
     setProdForm((prev) => ({
@@ -428,32 +478,56 @@ export default function MenuPage() {
 
       {/* Modal Categoría */}
       {showCatModal && (
-        <Modal title={editCat ? 'Editar categoría' : 'Nueva categoría'} onClose={() => setShowCatModal(false)} size="md">
-          <div className="space-y-3">
+        <Modal title={editCat ? 'Editar categoría' : 'Nueva categoría'} icon="🏷️" onClose={() => setShowCatModal(false)} size="md">
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={catForm.name} onChange={(e) => { setCatForm({ ...catForm, name: e.target.value }); setCatFieldErrors((prev) => ({ ...prev, name: '' })); }} placeholder="Ej: Entradas" />
-              {catFieldErrors.name && <p className="text-xs text-red-600 mt-1">{catFieldErrors.name}</p>}
+              <label className="block text-xs font-medium text-gray-400 mb-1">Nombre <span className="text-red-400">*</span></label>
+              <input
+                className={`w-full bg-white/5 border ${catFieldErrors.name ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                value={catForm.name}
+                onChange={(e) => { setCatForm({ ...catForm, name: e.target.value }); setCatFieldErrors((prev) => ({ ...prev, name: '' })); }}
+                placeholder="Ej: Entradas"
+              />
+              {catFieldErrors.name && <p className="text-xs text-red-400 mt-1">{catFieldErrors.name}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={catForm.description} onChange={(e) => { setCatForm({ ...catForm, description: e.target.value }); setCatFieldErrors((prev) => ({ ...prev, description: '' })); }} placeholder="Opcional" />
-              {catFieldErrors.description && <p className="text-xs text-red-600 mt-1">{catFieldErrors.description}</p>}
+              <label className="block text-xs font-medium text-gray-400 mb-1">Descripción</label>
+              <input
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                value={catForm.description}
+                onChange={(e) => { setCatForm({ ...catForm, description: e.target.value }); setCatFieldErrors((prev) => ({ ...prev, description: '' })); }}
+                placeholder="Opcional"
+              />
+              {catFieldErrors.description && <p className="text-xs text-red-400 mt-1">{catFieldErrors.description}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Orden</label>
-              <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={catForm.sortOrder} onChange={(e) => { setCatForm({ ...catForm, sortOrder: Number(e.target.value) }); setCatFieldErrors((prev) => ({ ...prev, sortOrder: '' })); }} />
-              {catFieldErrors.sortOrder && <p className="text-xs text-red-600 mt-1">{catFieldErrors.sortOrder}</p>}
+              <label className="block text-xs font-medium text-gray-400 mb-1">Orden</label>
+              <input
+                type="number"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                value={catForm.sortOrder}
+                onChange={(e) => { setCatForm({ ...catForm, sortOrder: Number(e.target.value) }); setCatFieldErrors((prev) => ({ ...prev, sortOrder: '' })); }}
+              />
+              {catFieldErrors.sortOrder && <p className="text-xs text-red-400 mt-1">{catFieldErrors.sortOrder}</p>}
             </div>
-            {catFormError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{catFormError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowCatModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => saveCat.mutate(catForm)} disabled={!catForm.name || saveCat.isPending}
-                className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
-                {saveCat.isPending ? 'Guardando...' : 'Guardar'}
+            {catFormError && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                <span className="text-red-400 text-sm flex-shrink-0">⚠</span>
+                <p className="text-sm text-red-400">{catFormError}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setShowCatModal(false)} className="px-5 py-2.5 text-sm font-medium border border-white/15 text-gray-300 rounded-xl hover:bg-white/5 transition-colors">Cancelar</button>
+              <button
+                onClick={() => saveCat.mutate(catForm)}
+                disabled={!catForm.name || saveCat.isPending}
+                className="px-5 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saveCat.isPending ? (
+                  <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</span>
+                ) : (
+                  editCat ? 'Guardar cambios' : 'Crear categoría'
+                )}
               </button>
             </div>
           </div>
@@ -462,23 +536,28 @@ export default function MenuPage() {
 
       {/* Modal Producto */}
       {showProdModal && (
-        <Modal title={editProd ? 'Editar producto' : 'Nuevo producto'} onClose={() => setShowProdModal(false)} size="xl">
-          <div className="space-y-3">
+        <Modal title={editProd ? 'Editar producto' : 'Nuevo producto'} icon="🍽️" onClose={() => setShowProdModal(false)} size="xl">
+          <div className="space-y-5">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-700">Datos básicos</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.name} onChange={(e) => { setProdForm({ ...prodForm, name: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, name: '' })); }} placeholder="Ej: Tacos de pastor" />
-                    {prodFieldErrors.name && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.name}</p>}
-                  </div>
+              {/* Columna izquierda */}
+              <div className="space-y-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">Datos básicos</p>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nombre <span className="text-red-400">*</span></label>
+                  <input
+                    className={`w-full bg-white/5 border ${prodFieldErrors.name ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                    value={prodForm.name}
+                    onChange={(e) => { setProdForm({ ...prodForm, name: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, name: '' })); }}
+                    placeholder="Ej: Tacos de pastor"
+                  />
+                  {prodFieldErrors.name && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.name}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio de venta (con IVA) *</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Precio de venta (con IVA) <span className="text-red-400">*</span></label>
                     <input
                       type="number" step="0.01"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.salePrice}
                       onChange={(e) => {
                         const sp = e.target.value;
@@ -489,90 +568,109 @@ export default function MenuPage() {
                         setProdForm((prev) => ({ ...prev, salePrice: sp, price: base }));
                         setProdFieldErrors((prev) => ({ ...prev, price: '' }));
                       }}
-                      placeholder="Ej: 2034 (incluye IVA)"
+                      placeholder="Ej: 2034"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio base (sin IVA) *</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Precio base (sin IVA)</label>
                     <input
                       type="number" step="0.01"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-gray-500 cursor-not-allowed"
                       value={prodForm.price}
                       readOnly
-                      placeholder="Se calcula automático"
+                      placeholder="Calculado automático"
                     />
-                    {prodFieldErrors.price && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.price}</p>}
-                    <p className="text-xs text-gray-400 mt-0.5">Calculado: precio de venta ÷ (1 + IVA%)</p>
+                    {prodFieldErrors.price && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.price}</p>}
+                    <p className="text-[11px] text-gray-500 mt-0.5">Calculado: precio de venta ÷ (1 + IVA%)</p>
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.categoryId} onChange={(e) => { setProdForm({ ...prodForm, categoryId: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, categoryId: '' })); }}>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Categoría</label>
+                    <select
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                      value={prodForm.categoryId}
+                      onChange={(e) => { setProdForm({ ...prodForm, categoryId: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, categoryId: '' })); }}
+                    >
                       <option value="">Sin categoría</option>
                       {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    {prodFieldErrors.categoryId && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.categoryId}</p>}
+                    {prodFieldErrors.categoryId && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.categoryId}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Código / SKU</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.sku} onChange={(e) => { setProdForm({ ...prodForm, sku: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, sku: '' })); }} placeholder="Opcional" />
-                    {prodFieldErrors.sku && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.sku}</p>}
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Código / SKU</label>
+                    <input
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                      value={prodForm.sku}
+                      onChange={(e) => { setProdForm({ ...prodForm, sku: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, sku: '' })); }}
+                      placeholder="Opcional"
+                    />
+                    {prodFieldErrors.sku && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.sku}</p>}
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del producto</label>
-                    {prodForm.imageUrl ? (
-                      <div className="flex items-center gap-3">
-                        <img src={prodForm.imageUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
-                        <div className="flex flex-col gap-1">
-                          <label className="cursor-pointer px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg inline-block">
-                            Cambiar imagen
-                            <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
-                          </label>
-                          <button type="button" onClick={() => { setProdForm((p) => ({ ...p, imageUrl: '' })); setImageUploadError(''); }} className="text-xs text-red-500 hover:text-red-700 text-left">Eliminar imagen</button>
-                        </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Imagen del producto</label>
+                  {prodForm.imageUrl ? (
+                    <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-xl">
+                      <img src={prodForm.imageUrl} alt="preview" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="cursor-pointer px-3 py-1.5 text-xs font-medium bg-white/10 text-gray-200 hover:bg-white/20 rounded-lg inline-block transition-colors">
+                          Cambiar imagen
+                          <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+                        </label>
+                        <button type="button" onClick={() => { setProdForm((p) => ({ ...p, imageUrl: '' })); setImageUploadError(''); }} className="text-xs text-red-400 hover:text-red-300 text-left transition-colors">Eliminar imagen</button>
                       </div>
-                    ) : (
-                      <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-lg px-4 py-3 hover:border-brand-400 transition-colors">
-                        <span className="text-2xl">📷</span>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Seleccionar imagen</p>
-                          <p className="text-xs text-gray-400">JPG, PNG, WEBP — máximo 1 MB</p>
-                        </div>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
-                      </label>
-                    )}
-                    {imageUploadError && <p className="text-xs text-red-600 mt-1">{imageUploadError}</p>}
-                    {prodFieldErrors.imageUrl && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.imageUrl}</p>}
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Alergenos</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.allergensText} onChange={(e) => { setProdForm({ ...prodForm, allergensText: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, allergens: '' })); }} placeholder="gluten, lactosa, nueces" />
-                    <p className="text-xs text-gray-500 mt-1">Separar por comas para cumplimiento informativo al consumidor.</p>
-                    {prodFieldErrors.allergens && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.allergens}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Puntos por compra</label>
-                    <input type="number" min="0" step="1" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      value={prodForm.pointsPerPurchase} onChange={(e) => { setProdForm({ ...prodForm, pointsPerPurchase: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, pointsPerPurchase: '' })); }} placeholder="0" />
-                    <p className="text-xs text-gray-500 mt-1">Puntos que gana el cliente por cada unidad comprada</p>
-                    {prodFieldErrors.pointsPerPurchase && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.pointsPerPurchase}</p>}
-                  </div>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-3 cursor-pointer border border-dashed border-white/20 rounded-xl px-4 py-3 hover:border-brand-400 hover:bg-white/5 transition-colors">
+                      <span className="text-2xl">📷</span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-300">Seleccionar imagen</p>
+                        <p className="text-xs text-gray-500">JPG, PNG, WEBP — máximo 1 MB</p>
+                      </div>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+                    </label>
+                  )}
+                  {imageUploadError && <p className="text-xs text-red-400 mt-1">{imageUploadError}</p>}
+                  {prodFieldErrors.imageUrl && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.imageUrl}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Alergenos</label>
+                  <input
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    value={prodForm.allergensText}
+                    onChange={(e) => { setProdForm({ ...prodForm, allergensText: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, allergens: '' })); }}
+                    placeholder="gluten, lactosa, nueces"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">Separar por comas para cumplimiento informativo al consumidor.</p>
+                  {prodFieldErrors.allergens && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.allergens}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Puntos por compra</label>
+                  <input
+                    type="number" min="0" step="1"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    value={prodForm.pointsPerPurchase}
+                    onChange={(e) => { setProdForm({ ...prodForm, pointsPerPurchase: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, pointsPerPurchase: '' })); }}
+                    placeholder="0"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">Puntos que gana el cliente por cada unidad comprada</p>
+                  {prodFieldErrors.pointsPerPurchase && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.pointsPerPurchase}</p>}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-gray-700">Datos fiscales (Hacienda)</p>
+              {/* Columna derecha */}
+              <div className="space-y-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">Datos fiscales (Hacienda)</p>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Código CABYS</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Código CABYS</label>
                   {prodForm.cabysCode && (
-                    <p className="text-xs font-mono text-brand-700 bg-brand-50 border border-brand-200 rounded px-2 py-1 mb-1">
+                    <p className="text-xs font-mono text-brand-400 bg-brand-600/10 border border-brand-500/20 rounded-lg px-2 py-1 mb-2">
                       Seleccionado: {prodForm.cabysCode}
                     </p>
                   )}
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                     value={cabysQuery}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -582,27 +680,30 @@ export default function MenuPage() {
                     }}
                     placeholder="Buscar por código o nombre de CABYS"
                   />
-                  <div className="mt-2 border border-gray-200 rounded-lg max-h-32 overflow-y-auto bg-gray-50">
-                    {cabysSuggestions.map((item) => (
-                      <button
-                        key={item.code}
-                        type="button"
-                        onClick={() => applyCabysSuggestion(item)}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
-                      >
-                        <p className="text-xs font-semibold text-gray-700">{item.code}</p>
-                        <p className="text-xs text-gray-500 truncate">{item.name}</p>
-                      </button>
-                    ))}
+                  <div className="mt-2 border border-white/10 rounded-xl max-h-32 overflow-y-auto bg-white/5">
+                    {filteredCabys.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-gray-500">No se encontraron codigos CABYS para la busqueda.</p>
+                    ) : (
+                      filteredCabys.map((item) => (
+                        <button
+                          key={item.code}
+                          type="button"
+                          onClick={() => applyCabysSuggestion(item)}
+                          className="w-full text-left px-3 py-2 hover:bg-white/10 border-b border-white/5 last:border-b-0 transition-colors"
+                        >
+                          <p className="text-xs font-semibold text-brand-400">{item.code}</p>
+                          <p className="text-xs text-gray-400 truncate">{item.name}</p>
+                        </button>
+                      ))
+                    )}
                   </div>
-                  {prodFieldErrors.cabysCode && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.cabysCode}</p>}
+                  {prodFieldErrors.cabysCode && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.cabysCode}</p>}
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de medida</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Unidad de medida</label>
                     <select
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.unitOfMeasure}
                       onChange={(e) => { setProdForm({ ...prodForm, unitOfMeasure: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, unitOfMeasure: '' })); }}
                     >
@@ -611,14 +712,13 @@ export default function MenuPage() {
                       <option value="kg">kg - Kilogramo</option>
                       <option value="L">L - Litro</option>
                     </select>
-                    {prodFieldErrors.unitOfMeasure && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.unitOfMeasure}</p>}
+                    {prodFieldErrors.unitOfMeasure && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.unitOfMeasure}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Impuesto (%)</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Impuesto (%)</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      type="number" step="0.01"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.taxRate}
                       onChange={(e) => {
                         const tax = e.target.value;
@@ -631,71 +731,90 @@ export default function MenuPage() {
                       }}
                       placeholder="13"
                     />
-                    {prodFieldErrors.taxRate && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.taxRate}</p>}
+                    {prodFieldErrors.taxRate && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.taxRate}</p>}
                   </div>
                 </div>
-
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo cod. comercial</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Tipo cod. comercial</label>
                     <input
                       maxLength={2}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.commercialCodeType}
                       onChange={(e) => { setProdForm({ ...prodForm, commercialCodeType: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, commercialCodeType: '' })); }}
                       placeholder="04"
                     />
-                    {prodFieldErrors.commercialCodeType && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.commercialCodeType}</p>}
+                    {prodFieldErrors.commercialCodeType && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.commercialCodeType}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cod. comercial</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Cod. comercial</label>
                     <input
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.commercialCode}
                       onChange={(e) => { setProdForm({ ...prodForm, commercialCode: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, commercialCode: '' })); }}
                       placeholder="Codigo interno/fiscal"
                     />
-                    {prodFieldErrors.commercialCode && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.commercialCode}</p>}
+                    {prodFieldErrors.commercialCode && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.commercialCode}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Codigo impuesto</label>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Codigo impuesto</label>
                     <input
                       maxLength={2}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.taxCode}
                       onChange={(e) => { setProdForm({ ...prodForm, taxCode: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, taxCode: '' })); }}
                       placeholder="01"
                     />
-                    {prodFieldErrors.taxCode && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.taxCode}</p>}
+                    {prodFieldErrors.taxCode && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.taxCode}</p>}
                   </div>
                 </div>
               </div>
             </div>
 
+            <div className="border-t border-white/8" />
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-              <textarea className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-                rows={2} value={prodForm.description} onChange={(e) => { setProdForm({ ...prodForm, description: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, description: '' })); }} placeholder="Opcional" />
-              {prodFieldErrors.description && <p className="text-xs text-red-600 mt-1">{prodFieldErrors.description}</p>}
+              <label className="block text-xs font-medium text-gray-400 mb-1">Descripción</label>
+              <textarea
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition resize-none"
+                rows={2}
+                value={prodForm.description}
+                onChange={(e) => { setProdForm({ ...prodForm, description: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, description: '' })); }}
+                placeholder="Descripción opcional del producto"
+              />
+              {prodFieldErrors.description && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.description}</p>}
             </div>
-            {prodFormError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{prodFormError}</p>}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" id="prodActive" checked={prodForm.isActive} onChange={(e) => setProdForm({ ...prodForm, isActive: e.target.checked })} className="rounded" />
-                <span className="text-sm text-gray-700">Activo</span>
+
+            {prodFormError && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                <span className="text-red-400 text-sm flex-shrink-0">⚠</span>
+                <p className="text-sm text-red-400">{prodFormError}</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={prodForm.isActive} onChange={(e) => setProdForm({ ...prodForm, isActive: e.target.checked })} className="w-4 h-4 rounded accent-brand-500" />
+                <span className="text-sm text-gray-300">Activo</span>
               </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" id="prodKiosk" checked={prodForm.showInKiosk} onChange={(e) => setProdForm({ ...prodForm, showInKiosk: e.target.checked })} className="rounded" />
-                <span className="text-sm text-gray-700">Mostrar en kiosko</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={prodForm.showInKiosk} onChange={(e) => setProdForm({ ...prodForm, showInKiosk: e.target.checked })} className="w-4 h-4 rounded accent-brand-500" />
+                <span className="text-sm text-gray-300">Mostrar en kiosko</span>
               </label>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowProdModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setShowProdModal(false)} className="px-5 py-2.5 text-sm font-medium border border-white/15 text-gray-300 rounded-xl hover:bg-white/5 transition-colors">Cancelar</button>
               <button
                 onClick={handleSaveProd}
                 disabled={!prodForm.name || saveProd.isPending}
-                className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
-                {saveProd.isPending ? 'Guardando...' : 'Guardar'}
+                className="px-5 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saveProd.isPending ? (
+                  <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</span>
+                ) : (
+                  editProd ? 'Guardar cambios' : 'Crear producto'
+                )}
               </button>
             </div>
           </div>

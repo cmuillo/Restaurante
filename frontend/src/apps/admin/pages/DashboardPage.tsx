@@ -15,6 +15,10 @@ type BranchConfig = { id: string; branchId: string; businessHours?: Partial<Busi
 type DailySales = {
   orderCount: number;
   totalSales: number;
+  billedSales: number;
+  creditNotesTotal: number;
+  debitNotesTotal: number;
+  netSales: number;
   avgTicket: number;
   totalTax: number;
   totalTip: number;
@@ -138,7 +142,7 @@ function calculateAlerts(
         icon: '🟡',
         title: 'Caída de pedidos detectada',
         message: `Solo ${row.daily?.orderCount ?? 0} órdenes hoy. Revisar estado de sistemas.`,
-        details: `Ventas: ${row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
+        details: `Ventas netas: ${row.daily?.netSales ?? row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
       });
       continue;
     }
@@ -151,7 +155,7 @@ function calculateAlerts(
       icon: '🟢',
       title: 'Operaciones normales',
       message: `${row.daily?.orderCount ?? 0} órdenes | Caja ${row.isShiftOpen ? 'abierta' : 'cerrada'}`,
-      details: `Ventas: ${row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
+      details: `Ventas netas: ${row.daily?.netSales ?? row.daily?.totalSales ?? 0} | Ticket: ${row.daily?.avgTicket ?? 0} | Horario hoy: ${scheduleLabel}`,
     });
   }
 
@@ -244,18 +248,27 @@ export default function DashboardPage() {
     };
   });
 
+
   const globalTotals = globalRows.reduce(
     (acc, row) => ({
       branches: acc.branches + 1,
       withOpenShift: acc.withOpenShift + (row.isShiftOpen ? 1 : 0),
-      totalSales: acc.totalSales + (row.daily?.totalSales ?? 0),
+      totalSales: acc.totalSales + (row.daily?.netSales ?? row.daily?.totalSales ?? 0),
       totalOrders: acc.totalOrders + (row.daily?.orderCount ?? 0),
+      creditNotes: acc.creditNotes + (row.daily?.creditNotesTotal ?? 0),
+      debitNotes: acc.debitNotes + (row.daily?.debitNotesTotal ?? 0),
+      billedSales: acc.billedSales + (row.daily?.billedSales ?? 0),
     }),
-    { branches: 0, withOpenShift: 0, totalSales: 0, totalOrders: 0 },
+    { branches: 0, withOpenShift: 0, totalSales: 0, totalOrders: 0, creditNotes: 0, debitNotes: 0, billedSales: 0 },
   );
 
   const globalAvgTicket =
     globalTotals.totalOrders > 0 ? globalTotals.totalSales / globalTotals.totalOrders : 0;
+
+  // KPI: Ratio de ajuste NC/ND global
+  const globalAdjustmentRatio = globalTotals.billedSales > 0
+    ? ((globalTotals.creditNotes - globalTotals.debitNotes) / globalTotals.billedSales) * 100
+    : 0;
 
   const globalLoading =
     isSuperAdmin &&
@@ -334,11 +347,12 @@ export default function DashboardPage() {
             <span className="text-xs text-gray-500 dark:text-gray-400">Actualización automática cada 30s</span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard label="Sucursales activas" value={String(globalTotals.branches)} icon="🏢" color="slate" />
             <StatCard label="Cajas abiertas" value={String(globalTotals.withOpenShift)} icon="🟢" color="green" />
-            <StatCard label="Ventas red" value={formatCurrency(globalTotals.totalSales, settings)} icon="🌐" color="blue" />
+            <StatCard label="Ventas netas red" value={formatCurrency(globalTotals.totalSales, settings)} icon="🌐" color="blue" />
             <StatCard label="Ticket promedio red" value={formatCurrency(globalAvgTicket, settings)} icon="🧾" color="indigo" />
+            <StatCard label="Ajuste NC/ND (%)" value={`${globalAdjustmentRatio.toFixed(2)}%`} icon="⚖️" color="rose" />
           </div>
 
           {globalLoading ? (
@@ -365,7 +379,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {globalRows
-                      .sort((a, b) => (b.daily?.totalSales ?? 0) - (a.daily?.totalSales ?? 0))
+                      .sort((a, b) => ((b.daily?.netSales ?? b.daily?.totalSales ?? 0) - (a.daily?.netSales ?? a.daily?.totalSales ?? 0)))
                       .map((row) => (
                         <tr key={row.branchId} className="bg-white dark:bg-transparent">
                           <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{row.branchName}</td>
@@ -380,7 +394,7 @@ export default function DashboardPage() {
                               {row.isShiftOpen ? 'Abierta' : 'Cerrada'}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{formatCurrency(row.daily?.totalSales ?? 0, settings)}</td>
+                          <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{formatCurrency(row.daily?.netSales ?? row.daily?.totalSales ?? 0, settings)}</td>
                           <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{row.daily?.orderCount ?? 0}</td>
                           <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{formatCurrency(row.daily?.avgTicket ?? 0, settings)}</td>
                           <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
@@ -431,8 +445,17 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
-        <StatCard label="Ventas del día"    value={formatCurrency(dailySales?.totalSales ?? 0, settings)}   icon="💰" color="amber" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+        <StatCard label="Ventas netas día"  value={formatCurrency(dailySales?.netSales ?? dailySales?.totalSales ?? 0, settings)} icon="💰" color="amber" />
+        <StatCard label="Ventas facturadas" value={formatCurrency(dailySales?.billedSales ?? 0, settings)} icon="🧾" color="slate" />
+        <StatCard label="NC emitidas"       value={formatCurrency(dailySales?.creditNotesTotal ?? 0, settings)} icon="📉" color="rose" />
+        <StatCard label="ND emitidas"       value={formatCurrency(dailySales?.debitNotesTotal ?? 0, settings)} icon="📈" color="purple" />
+        <StatCard label="Ajuste NC/ND (%)" value={
+          dailySales?.billedSales > 0
+            ? `${(((dailySales?.creditNotesTotal ?? 0) - (dailySales?.debitNotesTotal ?? 0)) / dailySales.billedSales * 100).toFixed(2)}%`
+            : '0.00%'}
+          icon="⚖️" color="rose"
+        />
         <StatCard label="Efectivo"          value={formatCurrency(dailySales?.cashSales ?? 0, settings)}    icon="💵" color="green" />
         <StatCard label="Tarjeta"           value={formatCurrency(dailySales?.cardSales ?? 0, settings)}    icon="💳" color="blue" />
         <StatCard label="Órdenes"           value={String(dailySales?.orderCount ?? 0)}                     icon="📋" color="purple" />
@@ -477,7 +500,7 @@ export default function DashboardPage() {
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <Tooltip formatter={(v: number) => formatCurrency(Number(v || 0), settings)} contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, color: '#f3f4f6' }} />
-              <Line type="monotone" dataKey="total" stroke="#f97316" name="Total" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="total" stroke="#f97316" name="Ventas netas" dot={false} strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -545,8 +568,18 @@ export default function DashboardPage() {
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-200 mb-4">Resultado del periodo (30 días)</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/15">
-              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Ventas</p>
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Ventas netas</p>
               <p className="text-2xl font-bold text-emerald-900 dark:text-emerald-100 mt-1">{formatCurrency(profitLoss.totalSales ?? 0, settings)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-500/30 dark:bg-slate-500/15">
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Ventas facturadas</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{formatCurrency(profitLoss.billedSales ?? 0, settings)}</p>
+            </div>
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/15">
+              <p className="text-xs font-medium text-rose-700 dark:text-rose-300">Ajuste NC/ND</p>
+              <p className="text-2xl font-bold text-rose-900 dark:text-rose-100 mt-1">
+                {formatCurrency((profitLoss.debitNotesTotal ?? 0) - (profitLoss.creditNotesTotal ?? 0), settings)}
+              </p>
             </div>
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/15">
               <p className="text-xs font-medium text-red-700 dark:text-red-300">Gastos</p>

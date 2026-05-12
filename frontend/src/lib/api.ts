@@ -89,6 +89,11 @@ function actionLabel(method: string): string {
   return 'guardar';
 }
 
+// Utilidad para mostrar alertas con encabezado personalizado.
+export function customAlert(message: string, title: string = 'Restaurante') {
+  window.alert(`${title}\n\n${message}`);
+}
+
 // Inyectar token JWT en cada petición
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
@@ -129,7 +134,9 @@ api.interceptors.response.use(
     if (method && method !== 'get') {
       if (!silentError) {
         const message = buildUserMessage(error);
-        window.alert(`No se pudo ${actionLabel(method)}: ${message}`);
+        const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+        const systemName = settings.restaurantName || 'Restaurante';
+        customAlert(`No se pudo ${actionLabel(method)}: ${message}`, systemName);
       }
     }
 

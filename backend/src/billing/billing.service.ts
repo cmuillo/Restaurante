@@ -14,6 +14,7 @@ import { Customer } from '../customers/entities/customer.entity';
 import { Product } from '../menu/entities/product.entity';
 import { Table, TableStatus } from '../tables/entities/table.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
+import { HaciendaExchangeRateService } from '../hacienda/hacienda-exchange-rate.service';
 
 @Injectable()
 export class BillingService {
@@ -29,6 +30,7 @@ export class BillingService {
     private readonly haciendaService: HaciendaService,
     private readonly customersService: CustomersService,
     private readonly gateway: RestaurantGateway,
+    private readonly exchangeRateService: HaciendaExchangeRateService,
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<any> {
@@ -38,11 +40,40 @@ export class BillingService {
         relations: ['branch', 'items', 'table', 'customer'],
       });
       if (!order) throw new NotFoundException('Orden no encontrada');
+
+      const existingInvoice = await manager.findOne(Invoice, {
+        where: { orderId: dto.orderId },
+      });
+
+      if (existingInvoice) {
+        throw new BadRequestException('Esta orden ya tiene una factura generada.');
+      }
+
       if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED) {
         throw new BadRequestException('La orden ya fue procesada o cancelada');
       }
 
       const config = await manager.findOne(BranchConfig, { where: { branchId: order.branchId } });
+
+      const currencyCode = String(dto.currencyCode ?? 'CRC').toUpperCase();
+      let exchangeRate = 1;
+      if (currencyCode !== 'CRC') {
+        try {
+          if (currencyCode === 'USD') {
+            exchangeRate = await this.exchangeRateService.getUsdRate();
+          } else if (currencyCode === 'EUR') {
+            exchangeRate = await this.exchangeRateService.getEurRate();
+          } else {
+            throw new BadRequestException(`Moneda ${currencyCode} no soportada`);
+          }
+        } catch (error) {
+          exchangeRate = Number(dto.exchangeRate ?? 0);
+        }
+
+        if (exchangeRate <= 0) {
+          throw new BadRequestException(`No se pudo obtener el tipo de cambio de Hacienda API para ${currencyCode}`);
+        }
+      }
 
       // Generar número de factura secuencial
       const invoiceNumber = `${config?.invoicePrefix || 'F-'}${String(config?.invoiceNextNumber ?? 1).padStart(6, '0')}`;
@@ -116,6 +147,8 @@ export class BillingService {
         invoiceNumber,
         paymentMethod: dto.paymentMethod,
         paymentDetails: Object.keys(normalizedPaymentDetails).length > 0 ? normalizedPaymentDetails : undefined,
+        currencyCode,
+        exchangeRate,
         customerName: dto.customerName || order.customer?.name || 'Consumidor final',
         customerTaxId: dto.customerTaxId || order.customer?.taxId || undefined,
         customerAddress: dto.customerAddress || order.customer?.address || undefined,
@@ -126,6 +159,7 @@ export class BillingService {
         total: orderTotal,
         cashReceived,
         change,
+        haciendaDocType: dto.docType === 'ND' ? 'ND' : 'FE', // Factura o Nota de Débito
       });
 
       const saved = await manager.save(Invoice, invoice);
@@ -242,6 +276,8 @@ export class BillingService {
             invoiceNumber: saved.invoiceNumber,
             issuedAt: saved.createdAt,
             paymentMethod: saved.paymentMethod,
+            currencyCode: saved.currencyCode,
+            exchangeRate: Number(saved.exchangeRate || 1),
             haciendaKey: saved.haciendaKey,
             haciendaConsecutive: saved.haciendaConsecutive,
           },

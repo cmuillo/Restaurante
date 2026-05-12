@@ -83,7 +83,11 @@ export default function App() {
           { headers: { 'X-Silent-Error': '1' } },
         )
         .then((r) => r.data),
-    onSuccess: (data) => setConfirmedOrder(String(data.orderNumber)),
+    onSuccess: (data) => setConfirmedOrder({
+      orderNumber: String(data.orderNumber),
+      message: data.message,
+      tableNumber: data.tableNumber ?? null,
+    }),
   });
 
   const screenMap: Record<typeof screen, React.ReactNode> = {

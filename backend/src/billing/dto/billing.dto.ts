@@ -16,6 +16,24 @@ export class CreateInvoiceDto {
   @IsObject()
   paymentDetails?: Record<string, number>;
 
+  @ApiProperty({ required: false, enum: ['CRC', 'USD', 'EUR'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currencyCode?: string;
+
+  @ApiProperty({ required: false, description: 'Tipo de cambio aplicable cuando la moneda no es CRC' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  exchangeRate?: number;
+
+  @ApiProperty({ required: false, enum: ['FE', 'ND'], description: 'Tipo de comprobante: FE=Factura, ND=Nota de Débito' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  docType?: 'FE' | 'ND';
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

@@ -17,8 +17,8 @@ export interface LineItem {
 }
 
 export interface BuildXmlOptions {
-  /** TE = Tiquete Electrónico | FE = Factura Electrónica | NC = Nota de Crédito */
-  docType: 'TE' | 'FE' | 'NC';
+  /** TE = Tiquete Electrónico | FE = Factura Electrónica | NC = Nota de Crédito | ND = Nota de Débito */
+  docType: 'TE' | 'FE' | 'NC' | 'ND';
   key: string;               // Clave numérica 50 dígitos
   consecutive: string;       // Número consecutivo 20 dígitos
   date: Date;
@@ -28,6 +28,7 @@ export interface BuildXmlOptions {
   issuerTaxId: string;       // Cédula jurídica o física (sin guiones)
   issuerTaxIdType: '01' | '02' | '03' | '04'; // 01=física 02=jurídica 03=DIMEX 04=NITE
   issuerCommercialName?: string;
+    issuerActivityCode?: string;
   issuerProvince: string;    // código 2 dígitos
   issuerCanton: string;      // código 2 dígitos
   issuerDistrict: string;    // código 2 dígitos
@@ -50,5 +51,14 @@ export interface BuildXmlOptions {
 
   // Condición de venta
   saleCondition?: '01' | '02';  // 01=contado 02=crédito
-  paymentMethod: '01' | '02' | '04' | '05'; // 01=efectivo 02=tarjeta 04=transfer 05=otro
+  paymentMethod: '01' | '02' | '04' | '05' | '06'; // 01=efectivo 02=tarjeta 04=transfer 05=otro 06=crédito
+
+  // Moneda
+  currencyCode?: 'CRC' | 'USD' | 'EUR';
+  exchangeRate?: number;
+
+  // Para Nota de Débito: referencia a documento original (ej: ND por ajuste en FE)
+  refDocType?: 'FE' | 'TE' | 'FE' | 'NC';
+  refDocNumber?: string;
+  refDocDate?: Date;
 }

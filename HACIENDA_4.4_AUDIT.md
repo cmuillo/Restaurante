@@ -335,4 +335,28 @@ npm run test:hacienda:sandbox
 
 ---
 
+## 🆕 ACTUALIZACIONES RECIENTES
+
+### Cambios Implementados
+
+1. **Notas de Débito (ND/06)**:
+   - Se implementaron las Notas de Débito en el sistema.
+   - Ahora se pueden emitir desde el módulo de administración.
+   - Las Notas de Débito y Crédito se reflejan en los reportes y el dashboard.
+
+2. **KPI de Ajuste NC/ND**:
+   - Se agregó un indicador en el dashboard para mostrar el ratio de ajuste NC/ND.
+   - Este KPI se calcula como: `(NC emitidas - ND emitidas) / Ventas facturadas`.
+
+3. **Soporte Multi-moneda (USD, EUR)**:
+   - Se agregó un mensaje de conversión de moneda en el POS al seleccionar USD o EUR.
+
+4. **Encabezado de Mensajes**:
+   - Los mensajes de alerta ahora muestran el nombre del restaurante/sistema en lugar de "localhost dice".
+
+5. **Explicación Legal sobre Anulación de Facturas**:
+   - Se agregó un mensaje en la interfaz administrativa explicando que las anulaciones de facturas deben ser informadas a Hacienda mediante Notas de Crédito Electrónicas.
+
+---
+
 **Conclusión**: El sistema está **86% compatible con Hacienda 4.4**. Las mejoras recomendadas son **progresivas** y **no críticas para producción**, pero se recomienda implementarlas en las próximas 4 semanas para máxima compatibilidad.

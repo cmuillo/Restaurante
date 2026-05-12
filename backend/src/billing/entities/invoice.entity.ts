@@ -17,6 +17,7 @@ export enum PaymentMethod {
   TRANSFER = 'transfer',
   QR = 'qr',
   MIXED = 'mixed',
+  CREDIT = 'credit',
 }
 
 @Entity('invoices')
@@ -43,6 +44,12 @@ export class Invoice {
   // Desglose del pago (ej: mixto — parte efectivo, parte tarjeta)
   @Column('jsonb', { nullable: true })
   paymentDetails: Record<string, number>;
+
+  @Column({ nullable: true, length: 3, default: 'CRC' })
+  currencyCode: string;
+
+  @Column('decimal', { precision: 12, scale: 6, default: 1 })
+  exchangeRate: number;
 
   // Datos del cliente para factura fiscal
   @Column({ nullable: true })
@@ -98,9 +105,19 @@ export class Invoice {
   @Column({ nullable: true, length: 20 })
   haciendaConsecutive: string;
 
-  /** Tipo: TE = Tiquete Electrónico, FE = Factura Electrónica, NC = Nota de Crédito */
+  /** Tipo: TE = Tiquete Electrónico, FE = Factura Electrónica, NC = Nota de Crédito, ND = Nota de Débito */
   @Column({ nullable: true, length: 2, default: 'TE' })
   haciendaDocType: string;
+
+  /** Referencia a documento original (para NC y ND) */
+  @Column({ nullable: true, length: 2 })
+  refDocType: string; // 01=FE, 04=TE, 05=NC
+
+  @Column({ nullable: true, length: 20 })
+  refDocNumber: string;
+
+  @Column({ nullable: true })
+  refDocDate: Date;
 
   /** XML firmado enviado a Hacienda (base64) */
   @Column('text', { nullable: true })

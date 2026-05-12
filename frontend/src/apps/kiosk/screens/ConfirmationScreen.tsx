@@ -6,6 +6,8 @@ const AUTO_RESET_SECS = 15;
 
 export default function ConfirmationScreen({ t, onReset }: { t: Strings; onReset: () => void }) {
   const confirmedOrderNumber = useKioskStore((s) => s.confirmedOrderNumber);
+  const confirmedOrderMessage = useKioskStore((s) => s.confirmedOrderMessage);
+  const confirmedTableNumber = useKioskStore((s) => s.confirmedTableNumber);
   const [secs, setSecs] = useState(AUTO_RESET_SECS);
 
   useEffect(() => {
@@ -25,6 +27,14 @@ export default function ConfirmationScreen({ t, onReset }: { t: Strings; onReset
       <div className="bg-gray-800 rounded-3xl px-12 py-6 text-center">
         <p className="text-gray-400 text-xl mb-2">{t.yourOrderNumber}</p>
         <p className="text-8xl font-black text-brand-400">{confirmedOrderNumber}</p>
+      </div>
+      <div className="bg-gray-800 rounded-3xl px-8 py-5 text-center max-w-2xl">
+        <p className="text-gray-400 text-lg mb-2">
+          {confirmedTableNumber ? t.tableAssigned : t.orderInfo}
+        </p>
+        <p className="text-2xl font-bold text-white">
+          {confirmedTableNumber ? `Mesa ${confirmedTableNumber}` : confirmedOrderMessage || 'Tu pedido fue registrado correctamente.'}
+        </p>
       </div>
       <p className="text-gray-400 text-xl">{t.waitForNumber}</p>
       <button

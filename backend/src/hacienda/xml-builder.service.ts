@@ -6,6 +6,7 @@ const DOC_TYPE_MAP = {
   TE: { tag: 'TiqueteElectronico', xmlns: 'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.3/tiqueteElectronico' },
   FE: { tag: 'FacturaElectronica', xmlns: 'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.3/facturaElectronica' },
   NC: { tag: 'NotaCreditoElectronica', xmlns: 'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.3/notaCreditoElectronica' },
+  ND: { tag: 'NotaDebitoElectronica', xmlns: 'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.3/notaDebitoElectronica' },
 };
 
 /**
@@ -26,7 +27,7 @@ export class XmlBuilderService {
       });
 
     root.ele('Clave').txt(opts.key);
-    root.ele('CodigoActividad').txt('561101'); // Restaurantes con servicio
+    root.ele('CodigoActividad').txt(opts.issuerActivityCode ?? '561101'); // Restaurantes con servicio
     root.ele('NumeroConsecutivo').txt(opts.consecutive);
     root.ele('FechaEmision').txt(dateStr);
     root.ele('CondicionVenta').txt(opts.saleCondition ?? '01');
@@ -60,6 +61,15 @@ export class XmlBuilderService {
       if (opts.receiverEmail) {
         receptor.ele('CorreoElectronico').txt(opts.receiverEmail);
       }
+    }
+
+    // ── Referencia a documento original (Notas de Débito/Crédito) ─────────
+    if ((opts.docType === 'NC' || opts.docType === 'ND') && opts.refDocType && opts.refDocNumber && opts.refDocDate) {
+      const referencia = root.ele('Referencia');
+      referencia.ele('TipoDoc').txt(opts.refDocType === 'FE' ? '01' : opts.refDocType === 'TE' ? '04' : '05');
+      referencia.ele('Numero').txt(opts.refDocNumber);
+      referencia.ele('FechaEmision').txt(this.formatDate(opts.refDocDate));
+      referencia.ele('Razon').txt(opts.docType === 'ND' ? 'Ajuste por cargos adicionales' : 'Devolución o ajuste');
     }
 
     // ── Detalle de servicios/mercancías ──────────────────────────────────
@@ -102,7 +112,20 @@ export class XmlBuilderService {
 
     // ── ResumenFactura ────────────────────────────────────────────────────
     const resumen = root.ele('ResumenFactura');
-    resumen.ele('CodigoTipoMoneda').ele('CodigoMoneda').txt('CRC').up().ele('TipoCambio').txt('1');
+    const currencyCode = opts.currencyCode ?? 'CRC';
+    const exchangeRate = opts.exchangeRate ?? 1;
+    
+    // Mapear códigos de moneda a ISO 4217
+    const currencyCodeMap: Record<string, string> = {
+      'CRC': '558', // Colones costarricenses
+      'USD': '840', // Dólares estadounidenses
+      'EUR': '978', // Euros
+    };
+    const isoCurrencyCode = currencyCodeMap[currencyCode] || currencyCode;
+    
+    const codigoMoneda = resumen.ele('CodigoTipoMoneda');
+    codigoMoneda.ele('CodigoMoneda').txt(isoCurrencyCode);
+    codigoMoneda.ele('TipoCambio').txt(this.fmt(exchangeRate));
     resumen.ele('TotalServGravados').txt(this.fmt(opts.subtotal));
     resumen.ele('TotalMercanciasGravadas').txt('0.00');
     resumen.ele('TotalGravado').txt(this.fmt(opts.subtotal));

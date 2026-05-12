@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { EmailConfigService } from './services/email-config.service';
@@ -50,7 +50,19 @@ export class SettingsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Actualizar configuración de correo SMTP (solo SUPER_ADMIN)' })
+
   async updateEmailConfig(@Body() dto: UpdateEmailConfigDto) {
     return this.emailConfigService.updateConfig(dto);
+  }
+
+  /** ─── Billing Status ────────────────────────────────────────────────────── */
+
+  @Get('billing-status/:branchId')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Obtener estado de facturación electrónica en tiempo real' })
+  async getBillingStatus(@Param('branchId', ParseUUIDPipe) branchId: string) {
+    return this.settingsService.getBillingStatus(branchId);
   }
 }

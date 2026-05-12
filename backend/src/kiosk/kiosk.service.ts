@@ -11,6 +11,8 @@ import { CreateKioskOrderDto } from './dto/create-kiosk-order.dto';
 import { OrderType } from '../orders/entities/order.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { KioskQuickRegisterDto } from './dto/kiosk-customer.dto';
+import { Table } from '../tables/entities/table.entity';
+import { TableStatus } from '../tables/entities/table.entity';
 import * as QRCode from 'qrcode';
 import * as nodemailer from 'nodemailer';
 
@@ -21,6 +23,7 @@ export class KioskService {
     @InjectRepository(BranchConfig) private readonly configRepository: Repository<BranchConfig>,
     @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Customer) private readonly customerRepository: Repository<Customer>,
+    @InjectRepository(Table) private readonly tableRepository: Repository<Table>,
     private readonly ordersService: OrdersService,
     private readonly emailConfigService: EmailConfigService,
   ) {}
@@ -77,24 +80,52 @@ export class KioskService {
    * Crea una orden desde el kiosko (sin autenticación, sin userId).
    * El branchId viene del parámetro de la URL para evitar que el cliente lo manipule.
    */
-  async createOrder(branchId: string, dto: CreateKioskOrderDto): Promise<{ orderNumber: number; total: number }> {
+  async createOrder(branchId: string, dto: CreateKioskOrderDto): Promise<{
+    orderNumber: number;
+    total: number;
+    tableNumber: number | null;
+    message: string;
+  }> {
     const config = await this.configRepository.findOne({ where: { branchId } });
     if (!config?.kioskEnabled) {
       throw new NotFoundException('El kiosko no está habilitado para esta sucursal');
     }
 
+    const selectedTable = dto.type === OrderType.DINE_IN
+      ? await this.tableRepository.findOne({
+        where: { branchId, isActive: true, status: TableStatus.FREE },
+        order: { number: 'ASC' },
+      })
+      : null;
+
+    const effectiveType = dto.type === OrderType.DINE_IN && !selectedTable
+      ? OrderType.TAKEOUT
+      : dto.type ?? OrderType.KIOSK;
+
     const order = await this.ordersService.create(
       {
         ...dto,
         branchId,
-        type: dto.type ?? OrderType.KIOSK,
+        type: effectiveType,
+        tableId: selectedTable?.id,
         taxPercentage: config.taxPercentage,
         tipPercentage: 0, // kiosko no aplica propina automática
       },
       undefined, // sin userId — orden de kiosko
     );
 
-    return { orderNumber: order.orderNumber, total: order.total };
+    const message = selectedTable
+      ? `Tu pedido quedó asignado a la mesa ${selectedTable.number}.`
+      : dto.type === OrderType.DINE_IN
+        ? 'No había mesas libres, por eso tu pedido se registró para llevar.'
+        : 'Tu pedido fue registrado para llevar.';
+
+    return {
+      orderNumber: order.orderNumber,
+      total: order.total,
+      tableNumber: selectedTable?.number ?? null,
+      message,
+    };
   }
 
   /**

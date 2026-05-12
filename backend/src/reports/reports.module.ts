@@ -8,9 +8,11 @@ import { Expense } from '../expenses/entities/expense.entity';
 import { Category } from '../menu/entities/category.entity';
 import { PosShift } from '../pos/entities/pos-shift.entity';
 import { PosCashMovement } from '../pos/entities/pos-cash-movement.entity';
+import { CreditNote } from '../credit-notes/entities/credit-note.entity';
+import { DebitNote } from '../debit-notes/entities/debit-note.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Order, Invoice, Expense, Category, PosShift, PosCashMovement])],
+  imports: [TypeOrmModule.forFeature([Order, Invoice, Expense, Category, PosShift, PosCashMovement, CreditNote, DebitNote])],
   controllers: [ReportsController],
   providers: [ReportsService],
 })

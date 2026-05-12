@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import api from '../../../lib/api';
 import { parseApiFormErrors } from '../../../lib/formErrors';
+import { customAlert } from '../../../lib/api';
 
 type Customer = {
   id: string;
@@ -18,15 +19,29 @@ type Customer = {
   isActive: boolean;
 };
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, icon, onClose, children }: { title: string; icon?: React.ReactNode; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-[var(--color-bg-secondary,#1e2435)] border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10">
+          {icon && (
+            <div className="w-9 h-9 rounded-xl bg-brand-600/20 flex items-center justify-center text-brand-400 text-lg flex-shrink-0">
+              {icon}
+            </div>
+          )}
+          <h3 className="text-base font-semibold text-white flex-1">{title}</h3>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-lg leading-none"
+          >
+            &times;
+          </button>
         </div>
-        {children}
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -77,11 +92,15 @@ export default function CustomersPage() {
     mutationFn: ({ id }: { id: string }) =>
       api.post(`/customers/${id}/send-qr`, undefined, { headers: { 'X-Silent-Error': '1' } }).then((r) => r.data),
     onSuccess: (data) => {
-      window.alert(data?.message ?? 'QR enviado correctamente');
+      const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+      const systemName = settings.restaurantName || 'Restaurante';
+      customAlert(data?.message ?? 'QR enviado correctamente', systemName);
     },
     onError: (error: any) => {
       const parsed = parseApiFormErrors(error);
-      window.alert(parsed.global || 'No se pudo enviar el QR');
+      const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+      const systemName = settings.restaurantName || 'Restaurante';
+      customAlert(parsed.global || 'No se pudo enviar el QR', systemName);
     },
   });
 
@@ -94,11 +113,35 @@ export default function CustomersPage() {
   }
   function openEdit(c: Customer) {
     setEditCustomer(c);
-    setForm({ name: c.name, email: c.email ?? '', phone: c.phone ?? '', taxId: c.taxId ?? '', taxIdType: c.taxIdType ?? '', address: c.address ?? '', birthdate: c.birthdate ?? '', notes: c.notes ?? '' });
+    setForm({
+      name: c.name,
+      email: c.email ?? '',
+      phone: c.phone ?? '',
+      taxId: c.taxId ?? '',
+      taxIdType: c.taxIdType ?? '',
+      address: c.address ?? '',
+      birthdate: c.birthdate ?? '',
+      notes: c.notes ?? ''
+    });
     setFormError('');
     setFieldErrors({});
     setShowModal(true);
   }
+
+  const getMaskForTaxIdType = (type: string) => {
+    switch (type) {
+      case '01': // Cédula Física
+        return '9-9999-9999';
+      case '02': // Cédula Jurídica
+        return '3-999-999999';
+      case '03': // DIMEX
+        return '999999999999';
+      case '04': // NITE
+        return '999999999999';
+      default:
+        return '';
+    }
+  };
 
   return (
     <div className="min-h-0">
@@ -186,71 +229,148 @@ export default function CustomersPage() {
       </div>
 
       {showModal && (
-        <Modal title={editCustomer ? 'Editar cliente' : 'Nuevo cliente'} onClose={() => setShowModal(false)}>
-          <div className="space-y-3">
-            {/* Nombre */}
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setFieldErrors((prev) => ({ ...prev, name: '' })); }} placeholder="Juan Pérez" />
-              {fieldErrors.name && <p className="text-xs text-red-600 mt-1">{fieldErrors.name}</p>}</div>
+        <Modal
+          title={editCustomer ? 'Editar cliente' : 'Nuevo cliente'}
+          icon={editCustomer ? '✏️' : '👤'}
+          onClose={() => setShowModal(false)}
+        >
+          <div className="space-y-5">
 
-            {/* Cédula */}
-            <div className="grid grid-cols-5 gap-2">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de cédula</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  value={form.taxIdType} onChange={(e) => setForm({ ...form, taxIdType: e.target.value })}>
-                  <option value="">-- Tipo --</option>
-                  <option value="01">01 — Física</option>
-                  <option value="02">02 — Jurídica</option>
-                  <option value="03">03 — DIMEX</option>
-                  <option value="04">04 — NITE</option>
-                </select>
+            {/* ── Información personal ── */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">Información personal</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nombre completo <span className="text-red-400">*</span></label>
+                  <input
+                    className={`w-full bg-white/5 border ${fieldErrors.name ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                    value={form.name}
+                    onChange={(e) => { setForm({ ...form, name: e.target.value }); setFieldErrors((prev) => ({ ...prev, name: '' })); }}
+                    placeholder="Ej: Juan Pérez Rodríguez"
+                  />
+                  {fieldErrors.name && <p className="text-xs text-red-400 mt-1">{fieldErrors.name}</p>}
+                </div>
+
+                <div className="grid grid-cols-5 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Tipo de cédula</label>
+                    <select
+                      value={form.taxIdType}
+                      onChange={(e) => setForm((prev) => ({ ...prev, taxIdType: e.target.value }))}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    >
+                      <option value="01">01 — Cédula Física</option>
+                      <option value="02">02 — Cédula Jurídica</option>
+                      <option value="03">03 — DIMEX</option>
+                      <option value="04">04 — NITE</option>
+                    </select>
+                  </div>
+                  <div className="col-span-3">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Número de cédula</label>
+                    <input
+                      value={form.taxId}
+                      onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))}
+                      placeholder={getMaskForTaxIdType(form.taxIdType) || 'Número de identificación'}
+                      className={`w-full bg-white/5 border ${fieldErrors.taxId ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                    />
+                    {fieldErrors.taxId && <p className="text-xs text-red-400 mt-1">{fieldErrors.taxId}</p>}
+                  </div>
+                </div>
               </div>
-              <div className="col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Número de cédula</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  value={form.taxId} onChange={(e) => { setForm({ ...form, taxId: e.target.value }); setFieldErrors((prev) => ({ ...prev, taxId: '' })); }} placeholder="1-1234-5678" />
-                {fieldErrors.taxId && <p className="text-xs text-red-600 mt-1">{fieldErrors.taxId}</p>}
+            </div>
+
+            <div className="border-t border-white/8" />
+
+            {/* ── Contacto ── */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">Contacto</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Correo electrónico</label>
+                  <input
+                    type="email"
+                    className={`w-full bg-white/5 border ${fieldErrors.email ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                    value={form.email}
+                    onChange={(e) => { setForm({ ...form, email: e.target.value }); setFieldErrors((prev) => ({ ...prev, email: '' })); }}
+                    placeholder="correo@ejemplo.com"
+                  />
+                  {fieldErrors.email && <p className="text-xs text-red-400 mt-1">{fieldErrors.email}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Teléfono</label>
+                  <input
+                    className={`w-full bg-white/5 border ${fieldErrors.phone ? 'border-red-500' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition`}
+                    value={form.phone}
+                    onChange={(e) => { setForm({ ...form, phone: e.target.value }); setFieldErrors((prev) => ({ ...prev, phone: '' })); }}
+                    placeholder="8888-0000"
+                  />
+                  {fieldErrors.phone && <p className="text-xs text-red-400 mt-1">{fieldErrors.phone}</p>}
+                </div>
               </div>
             </div>
 
-            {/* Email y Teléfono */}
-            <div className="grid grid-cols-2 gap-2">
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setFieldErrors((prev) => ({ ...prev, email: '' })); }} />
-                {fieldErrors.email && <p className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>}</div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  value={form.phone} onChange={(e) => { setForm({ ...form, phone: e.target.value }); setFieldErrors((prev) => ({ ...prev, phone: '' })); }} />
-                {fieldErrors.phone && <p className="text-xs text-red-600 mt-1">{fieldErrors.phone}</p>}</div>
+            <div className="border-t border-white/8" />
+
+            {/* ── Dirección y nacimiento ── */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-3">Datos adicionales</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Dirección</label>
+                  <input
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    placeholder="Provincia, cantón, distrito, señas"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Fecha de nacimiento</label>
+                  <input
+                    type="date"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition [color-scheme:dark]"
+                    value={form.birthdate}
+                    onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Notas internas</label>
+                  <textarea
+                    rows={2}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition resize-none"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Preferencias, alergias, observaciones..."
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Dirección */}
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
-              <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Provincia, cantón, distrito, señas" />
-            </div>
+            {formError && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+                <span className="text-red-400 text-sm flex-shrink-0">⚠</span>
+                <p className="text-sm text-red-400">{formError}</p>
+              </div>
+            )}
 
-            {/* Fecha de nacimiento */}
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento</label>
-              <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} />
-            </div>
-
-            {/* Notas */}
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Notas internas</label>
-              <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-                value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Preferencias, alergias, observaciones..." />
-            </div>
-
-            {formError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => saveCustomer.mutate(form)} disabled={!form.name || saveCustomer.isPending}
-                className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
-                {saveCustomer.isPending ? 'Guardando...' : 'Guardar'}
+            {/* ── Acciones ── */}
+            <div className="flex justify-end gap-3 pt-1">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-5 py-2.5 text-sm font-medium border border-white/15 text-gray-300 rounded-xl hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => saveCustomer.mutate(form)}
+                disabled={!form.name || saveCustomer.isPending}
+                className="px-5 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saveCustomer.isPending ? (
+                  <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</span>
+                ) : (
+                  editCustomer ? 'Guardar cambios' : 'Crear cliente'
+                )}
               </button>
             </div>
           </div>

@@ -60,6 +60,10 @@ export class BranchConfig {
   @Column({ default: false })
   haciendaEnabled: boolean;
 
+  /** Código de actividad (CABYS) del emisor — 6 dígitos, ej: 561101 para restaurantes */
+  @Column({ nullable: true, length: 6, default: '561101' })
+  haciendaActivityCode: string;
+
   /** Tipo de identificación del emisor: 01=física 02=jurídica 03=DIMEX 04=NITE */
   @Column({ nullable: true, length: 2 })
   haciendaTaxIdType: string;

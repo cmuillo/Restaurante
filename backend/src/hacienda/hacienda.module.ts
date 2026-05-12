@@ -9,6 +9,7 @@ import { HaciendaAuthService } from './hacienda-auth.service';
 import { XmlBuilderService } from './xml-builder.service';
 import { XadesSignerService } from './xades-signer.service';
 import { HaciendaService } from './hacienda.service';
+import { HaciendaExchangeRateService } from './hacienda-exchange-rate.service';
 import { HaciendaController } from './hacienda.controller';
 
 @Module({
@@ -22,8 +23,9 @@ import { HaciendaController } from './hacienda.controller';
     HaciendaAuthService,
     XmlBuilderService,
     XadesSignerService,
+    HaciendaExchangeRateService,
     HaciendaService,
   ],
-  exports: [HaciendaService],
+  exports: [HaciendaService, HaciendaExchangeRateService],
 })
 export class HaciendaModule {}

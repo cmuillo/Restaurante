@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../stores/auth.store';
 import { useSettings } from '../../../hooks/useSettings';
 import { fmtMoney, formatCurrency } from '../../../stores/settings.store';
 import { BillingModal } from '../components/BillingModal';
+import { FacturingStatusIndicator } from '../components/FacturingStatusIndicator';
 
 interface CartItem {
   productId: string;
@@ -42,6 +43,7 @@ interface PendingOrder {
     email?: string;
     loyaltyPoints: number;
   } | null;
+  invoice?: { id: string } | null;
   items: PendingOrderItem[];
 }
 
@@ -411,7 +413,7 @@ export default function PosPage() {
         .get(`/orders?branchId=${branchId}`)
         .then((r) => r.data)
         .then((orders: PendingOrder[]) =>
-          orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled'),
+          orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled' && !o.invoice),
         ),
     enabled: !!branchId,
     refetchInterval: 15000,
@@ -1282,7 +1284,7 @@ export default function PosPage() {
                 </select>
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               {canManageShift && (
                 <>
                   <span
@@ -1336,6 +1338,7 @@ export default function PosPage() {
                   </button>
                 </>
               )}
+              <FacturingStatusIndicator />
               {['DINE_IN', 'TO_GO', 'DELIVERY'].map((t) => (
                 <button
                   key={t}

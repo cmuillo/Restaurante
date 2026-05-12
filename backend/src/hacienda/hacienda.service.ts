@@ -12,6 +12,10 @@ import { XadesSignerService } from './xades-signer.service';
 import { BuildXmlOptions } from './hacienda.types';
 import { PaymentMethod } from '../billing/entities/invoice.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
+import { validateId } from './helpers/id-validators';
+import { validateCabysCode, VALID_CABYS_CODES } from './helpers/cabys-validator';
+import { validateTotals } from './helpers/totals-validator';
+import { HaciendaExchangeRateService } from './hacienda-exchange-rate.service';
 
 /** Crea la clave numérica de 50 dígitos exigida por Hacienda */
 function buildKey(params: {
@@ -44,15 +48,16 @@ function buildConsecutive(params: {
 }
 
 /** Mapa de método de pago interno → código Hacienda */
-function mapPaymentMethod(pm: PaymentMethod): '01' | '02' | '04' | '05' {
-  const map: Record<PaymentMethod, '01' | '02' | '04' | '05'> = {
+function mapPaymentMethod(pm: PaymentMethod): '01' | '02' | '04' | '05' | '06' {
+  const map: Record<PaymentMethod, '01' | '02' | '04' | '05' | '06'> = {
     [PaymentMethod.CASH]: '01',
     [PaymentMethod.CARD]: '02',
     [PaymentMethod.TRANSFER]: '04',
     [PaymentMethod.QR]: '04',
     [PaymentMethod.MIXED]: '05',
+    [PaymentMethod.CREDIT]: '06',
   };
-  return map[pm] ?? '05';
+  return map[pm] ?? '05'; // Defecto: otro (05)
 }
 
 @Injectable()
@@ -67,6 +72,7 @@ export class HaciendaService {
     private readonly xmlBuilder: XmlBuilderService,
     private readonly signer: XadesSignerService,
     private readonly config: ConfigService,
+    private readonly exchangeRateService: HaciendaExchangeRateService,
   ) {}
 
   /**
@@ -132,6 +138,53 @@ export class HaciendaService {
       .padStart(8, '0');
     const key = buildKey({ taxId, date: invoice.createdAt, consecutive, securityCode });
 
+    // Validar CABYS del emisor
+    const activityCode = branchConfig.haciendaActivityCode ?? '561101';
+    const cabysValidation = validateCabysCode(activityCode);
+    if (!cabysValidation.valid) {
+      this.logger.warn(`CABYS inválido: ${cabysValidation.reason} - usando 561101 por defecto`);
+    }
+
+    // Validar totales automáticamente antes de enviar
+    const totalsValidation = validateTotals({
+      lines: invoice.order.items.map((line) => ({
+        quantity: line.quantity,
+        unitPrice: parseFloat(String(line.unitPrice)),
+        discount: 0,
+        taxRate: line.taxRate == null
+          ? parseFloat(String(branchConfig.taxPercentage ?? 13))
+          : parseFloat(String(line.taxRate)),
+      })),
+      subtotal: parseFloat(String(invoice.subtotal)),
+      discount: parseFloat(String(invoice.discountAmount)),
+      taxAmount: parseFloat(String(invoice.taxAmount)),
+      total: parseFloat(String(invoice.total)),
+    });
+
+    if (!totalsValidation.valid) {
+      const errorMsg = `Errores en totales: ${totalsValidation.errors.join(', ')}`;
+      this.logger.error(errorMsg);
+      throw new BadRequestException(errorMsg);
+    }
+
+    if (totalsValidation.warnings.length > 0) {
+      this.logger.warn(`Advertencias en totales: ${totalsValidation.warnings.join(', ')}`);
+    }
+
+    const currencyCode = String((invoice as Invoice & { currencyCode?: string }).currencyCode ?? 'CRC').toUpperCase() as 'CRC' | 'USD' | 'EUR';
+    const exchangeRate = Number((invoice as Invoice & { exchangeRate?: number }).exchangeRate ?? 1);
+    let resolvedExchangeRate = exchangeRate;
+    if (currencyCode !== 'CRC' && resolvedExchangeRate <= 0) {
+      if (currencyCode === 'USD') {
+        resolvedExchangeRate = await this.exchangeRateService.getUsdRate();
+      } else if (currencyCode === 'EUR') {
+        resolvedExchangeRate = await this.exchangeRateService.getEurRate();
+      }
+    }
+    if (currencyCode !== 'CRC' && resolvedExchangeRate <= 0) {
+      throw new BadRequestException('La factura requiere un tipo de cambio válido para moneda extranjera');
+    }
+
     // Construir líneas a partir de los ítems de la orden
     const lines = invoice.order.items?.map((item: OrderItem) => ({
       productName: item.product?.name ?? item.productName ?? 'Producto',
@@ -157,10 +210,13 @@ export class HaciendaService {
       issuerTaxId: taxId,
       issuerTaxIdType: taxIdType ?? '02',
       issuerCommercialName: branchConfig.branch?.name,
+      issuerActivityCode: activityCode,
       issuerProvince: branchConfig.haciendaProvince ?? this.config.get('HACIENDA_PROVINCE') ?? '01',
       issuerCanton: branchConfig.haciendaCanton ?? this.config.get('HACIENDA_CANTON') ?? '01',
       issuerDistrict: branchConfig.haciendaDistrict ?? this.config.get('HACIENDA_DISTRICT') ?? '01',
       issuerAddress: branchConfig.branch?.address ?? 'Costa Rica',
+      currencyCode,
+      exchangeRate: resolvedExchangeRate,
       receiverName: invoice.customerName,
       receiverTaxId: invoice.customerTaxId,
       receiverEmail: undefined,
@@ -171,6 +227,20 @@ export class HaciendaService {
       total: parseFloat(String(invoice.total)),
       paymentMethod: mapPaymentMethod(invoice.paymentMethod),
     };
+
+    // Validar identificaciones según especificación Hacienda 4.4
+    const issuerIdValidation = validateId(taxId, taxIdType as '01' | '02' | '03' | '04');
+    if (!issuerIdValidation.valid) {
+      throw new BadRequestException(`Emisor: ${issuerIdValidation.reason}`);
+    }
+
+    if (invoice.customerTaxId) {
+      const receiverIdType = '01'; // Asumir física por defecto si no está especificado
+      const receiverIdValidation = validateId(invoice.customerTaxId, receiverIdType as '01' | '02' | '03' | '04');
+      if (!receiverIdValidation.valid) {
+        this.logger.warn(`Receptor: ${receiverIdValidation.reason} - usando de todas formas`);
+      }
+    }
 
     const xml = this.xmlBuilder.build(xmlOpts);
     const signedXml = this.signer.sign(xml);
@@ -333,6 +403,11 @@ export class HaciendaService {
     };
   }
 
+  /** Obtiene los tipos de cambio actuales desde la API de Hacienda */
+  async getExchangeRates() {
+    return this.exchangeRateService.getExchangeRates();
+  }
+
   /** Actualiza los campos Hacienda en BranchConfig */
   async updateConfig(branchId: string, dto: UpdateHaciendaConfigDto) {
     const cfg = await this.configRepository.findOne({ where: { branchId } });
@@ -387,5 +462,30 @@ export class HaciendaService {
       .orderBy('inv.createdAt', 'DESC')
       .limit(safeLimit)
       .getMany();
+  }
+
+  getCabysCodes(search = ''): Array<{
+    code: string;
+    name: string;
+    suggestedTaxRate: number;
+    suggestedTaxCode: string;
+    suggestedUnitOfMeasure: string;
+  }> {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return Object.entries(VALID_CABYS_CODES as Record<string, string>)
+      .filter(([code, name]) =>
+        !normalizedSearch
+        || code.includes(normalizedSearch)
+        || name.toLowerCase().includes(normalizedSearch)
+      )
+      .slice(0, 25)
+      .map(([code, name]) => ({
+        code,
+        name,
+        suggestedTaxRate: 13,
+        suggestedTaxCode: '01',
+        suggestedUnitOfMeasure: 'Sp',
+      }));
   }
 }

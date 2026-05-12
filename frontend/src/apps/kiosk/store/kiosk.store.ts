@@ -34,6 +34,8 @@ interface KioskState {
   cart: CartItem[];
   selectedProductId: string | null;
   confirmedOrderNumber: string | null;
+  confirmedOrderMessage: string | null;
+  confirmedTableNumber: number | null;
   lastActivityAt: number;
 
   goTo: (screen: KioskScreen) => void;
@@ -42,18 +44,20 @@ interface KioskState {
   selectProduct: (id: string) => void;
   addToCart: (item: CartItem) => void;
   removeFromCart: (productId: string) => void;
-  setConfirmedOrder: (orderNumber: string) => void;
+  setConfirmedOrder: (payload: { orderNumber: string; message: string; tableNumber: number | null }) => void;
   reset: () => void;
   touch: () => void;
 }
 
-const INITIAL: Pick<KioskState, 'screen' | 'orderType' | 'customer' | 'cart' | 'selectedProductId' | 'confirmedOrderNumber' | 'lastActivityAt'> = {
+const INITIAL: Pick<KioskState, 'screen' | 'orderType' | 'customer' | 'cart' | 'selectedProductId' | 'confirmedOrderNumber' | 'confirmedOrderMessage' | 'confirmedTableNumber' | 'lastActivityAt'> = {
   screen: 'WELCOME',
   orderType: null,
   customer: null,
   cart: [],
   selectedProductId: null,
   confirmedOrderNumber: null,
+  confirmedOrderMessage: null,
+  confirmedTableNumber: null,
   lastActivityAt: Date.now(),
 };
 
@@ -77,8 +81,14 @@ export const useKioskStore = create<KioskState>((set) => ({
   removeFromCart: (productId) =>
     set((s) => ({ cart: s.cart.filter((i) => i.productId !== productId), lastActivityAt: Date.now() })),
 
-  setConfirmedOrder: (confirmedOrderNumber) =>
-    set({ confirmedOrderNumber, screen: 'CONFIRMATION', lastActivityAt: Date.now() }),
+  setConfirmedOrder: ({ orderNumber, message, tableNumber }) =>
+    set({
+      confirmedOrderNumber: orderNumber,
+      confirmedOrderMessage: message,
+      confirmedTableNumber: tableNumber,
+      screen: 'CONFIRMATION',
+      lastActivityAt: Date.now(),
+    }),
 
   reset: () => set({ ...INITIAL, lastActivityAt: Date.now() }),
   touch: () => set({ lastActivityAt: Date.now() }),

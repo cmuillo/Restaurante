@@ -48,6 +48,15 @@ export class HaciendaController {
   }
 
   /**
+   * GET /hacienda/exchange-rates
+   * Devuelve los tipos de cambio actuales (USD y EUR).
+   */
+  @Get('exchange-rates')
+  getExchangeRates() {
+    return this.haciendaService.getExchangeRates();
+  }
+
+  /**
    * PUT /hacienda/config?branchId=<uuid>
    * Actualiza los campos de configuración Hacienda en BranchConfig.
    */
@@ -124,5 +133,14 @@ export class HaciendaController {
     @Query('branchId', ParseUUIDPipe) branchId: string,
   ) {
     return this.haciendaService.resend(id, branchId);
+  }
+
+  /**
+   * GET /hacienda/cabys-codes?search=...
+   * Devuelve los códigos CABYS dinámicamente.
+   */
+  @Get('cabys-codes')
+  getCabysCodes(@Query('search') search: string) {
+    return this.haciendaService.getCabysCodes(search);
   }
 }

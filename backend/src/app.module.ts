@@ -20,6 +20,9 @@ import { AuditModule } from './audit/audit.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { SettingsModule } from './settings/settings.module';
 
+import { CreditNotesModule } from './credit-notes/credit-notes.module';
+import { DebitNotesModule } from './debit-notes/debit-notes.module';
+
 @Module({
   imports: [
     // Config global
@@ -63,6 +66,8 @@ import { SettingsModule } from './settings/settings.module';
     AuditModule,
     WebsocketsModule,
     SettingsModule,
+    CreditNotesModule,
+    DebitNotesModule,
   ],
 })
 export class AppModule {}

@@ -228,6 +228,10 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   const [step, setStep] = useState<'payment' | 'cancelling' | 'cancelled' | 'invoice'>(initialStep);
   const [cancelReason, setCancelReason] = useState<string>(CANCEL_REASONS[0]);
   const [cancelNotes, setCancelNotes] = useState<string>('');
+  const [currencyCode, setCurrencyCode] = useState<'CRC' | 'USD' | 'EUR'>('CRC');
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [exchangeRates, setExchangeRates] = useState<{ usd: number; eur: number } | null>(null);
+  const [loadingRates, setLoadingRates] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !order) return;
@@ -242,7 +246,42 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
     setPointsToUse(0);
     setCancelReason(CANCEL_REASONS[0]);
     setCancelNotes('');
+    setCurrencyCode('CRC');
+    setExchangeRate(1);
   }, [isOpen, order]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cargar tipos de cambio al abrir el modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchExchangeRates = async () => {
+      try {
+        setLoadingRates(true);
+        const response = await api.get('/hacienda/exchange-rates');
+        if (response.data?.usd && response.data?.eur) {
+          setExchangeRates({
+            usd: response.data.usd.value,
+            eur: response.data.eur.value,
+          });
+        }
+      } catch (error) {
+        console.warn('No se pudieron cargar los tipos de cambio', error);
+      } finally {
+        setLoadingRates(false);
+      }
+    };
+    fetchExchangeRates();
+  }, [isOpen]);
+
+  // Actualizar tipo de cambio cuando cambia moneda
+  useEffect(() => {
+    if (currencyCode === 'CRC') {
+      setExchangeRate(1);
+    } else if (currencyCode === 'USD' && exchangeRates?.usd) {
+      setExchangeRate(exchangeRates.usd);
+    } else if (currencyCode === 'EUR' && exchangeRates?.eur) {
+      setExchangeRate(exchangeRates.eur);
+    }
+  }, [currencyCode, exchangeRates]);
 
   // Mantiene el efectivo sugerido alineado al total final cuando cambia el descuento por puntos.
   useEffect(() => {
@@ -292,6 +331,8 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               : 0,
           customerName: customer?.name || order?.customer?.name,
           pointsUsed: usePoints ? pointsToUse : 0,
+          currencyCode: currencyCode !== 'CRC' ? currencyCode : undefined,
+          exchangeRate: currencyCode !== 'CRC' ? exchangeRate : undefined,
         })
         .then((r) => r.data),
     onSuccess: (data) => {
@@ -317,6 +358,9 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   const change = paymentMethod === 'cash' ? Math.max(0, cashReceived - discountedTotal) : 0;
   const mixedCardAmount = Math.max(0, discountedTotal - mixedCashAmount);
   const mixedChange = paymentMethod === 'mixed' ? Math.max(0, mixedCashReceived - mixedCashAmount) : 0;
+  const convertedTotal = currencyCode !== 'CRC' && exchangeRate > 0
+    ? discountedTotal / exchangeRate
+    : discountedTotal;
 
   const printInvoiceReport = () => {
     const printable = (invoice?.printable || {}) as PrintableInvoiceData;
@@ -390,7 +434,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 max-h-[92vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full mx-4 max-h-[92vh] overflow-hidden flex flex-col">
         {step === 'payment' ? (
           <>
             {/* Header */}
@@ -400,7 +444,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
             </div>
 
             {/* Contenido */}
-            <div className="p-6 space-y-4 overflow-y-auto">
+            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-y-auto">
               {/* Resumen de orden */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -503,6 +547,51 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 </div>
               )}
 
+              {/* Moneda */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Moneda</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['CRC', 'USD', 'EUR'] as const).map((currency) => (
+                    <button
+                      key={currency}
+                      onClick={() => setCurrencyCode(currency)}
+                      className={`py-2 px-3 rounded-lg font-medium text-sm transition-colors ${
+                        currencyCode === currency
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {currency === 'CRC' ? '₡ CRC' : currency === 'USD' ? '$ USD' : '€ EUR'}
+                    </button>
+                  ))}
+                </div>
+                {currencyCode !== 'CRC' && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-amber-700">
+                      <span className="font-semibold">Tipo de cambio {currencyCode}:</span>{' '}
+                      {loadingRates ? (
+                        <span>Cargando...</span>
+                      ) : (
+                        <span className="font-bold">{exchangeRate?.toFixed(2)}</span>
+                      )}
+                    </p>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={exchangeRate}
+                      onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 1)}
+                      className="w-full border border-amber-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      placeholder="Tipo de cambio"
+                      disabled={loadingRates}
+                    />
+                    <p className="text-xs text-amber-600">Puedes ajustar manualmente si es necesario</p>
+                    <p className="text-xs text-amber-700 font-medium">
+                      Monto a pagar aproximado: {currencyCode === 'USD' ? '$' : '€'} {convertedTotal.toFixed(2)} ({formatCurrency(discountedTotal, settings)})
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Método de pago */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Método de pago</label>
@@ -604,7 +693,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               )}
 
               {/* Botones */}
-              <div className="flex gap-2 pt-4">
+              <div className="lg:col-span-2 flex gap-2 pt-4">
                 <button
                   onClick={onClose}
                   disabled={createInvoice.isPending}
@@ -633,8 +722,10 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               </div>
 
               {createInvoice.isError && (
-                <p className="text-red-600 text-sm text-center">
-                  Error: {(createInvoice.error as any)?.response?.data?.message || 'No se pudo generar la factura'}
+                <p className="lg:col-span-2 text-red-600 text-sm text-center">
+                  {String((createInvoice.error as any)?.response?.data?.message || '').toLowerCase().includes('ya tiene una factura')
+                    ? 'Esta orden ya fue facturada anteriormente. Actualiza la lista de pendientes para ver el estado correcto.'
+                    : `Error: ${(createInvoice.error as any)?.response?.data?.message || 'No se pudo generar la factura'}`}
                 </p>
               )}
             </div>

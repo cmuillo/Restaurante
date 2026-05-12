@@ -24,7 +24,7 @@ export class KitchenService {
   private async findKitchenOrder(id: string, branchId: string): Promise<Order> {
     const order = await this.orderRepository.findOne({
       where: { id, branchId },
-      relations: ['items', 'items.modifiers', 'table', 'customer'],
+      relations: ['items', 'items.modifiers', 'table', 'customer', 'invoice'],
     });
     if (!order) throw new NotFoundException('Orden no encontrada');
     return order;
@@ -38,6 +38,7 @@ export class KitchenService {
       .leftJoinAndSelect('items.modifiers', 'modifiers')
       .leftJoinAndSelect('order.table', 'table')
       .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.invoice', 'invoice')
       .where('order.branchId = :branchId', { branchId })
       .andWhere('order.createdAt >= :startOfDay', { startOfDay: this.startOfDay() })
       .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
@@ -48,6 +49,11 @@ export class KitchenService {
   async startPreparation(id: string, branchId: string, userId?: string): Promise<Order> {
     const order = await this.findKitchenOrder(id, branchId);
 
+    // Solo bloquear si está cancelada o ya fue marcada lista por cocina
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('La orden está cancelada.');
+    }
+
     if (order.readyAt) {
       throw new BadRequestException('La orden ya fue marcada como lista');
     }
@@ -57,10 +63,13 @@ export class KitchenService {
     }
 
     const preparationStartedAt = new Date();
+    // Si la orden ya está COMPLETED (pagó antes de cocinar), no cambiar el status contable
+    const newStatus = order.status === OrderStatus.COMPLETED ? OrderStatus.COMPLETED : OrderStatus.IN_PREPARATION;
+
     await this.dataSource.transaction(async (manager) => {
       await manager.update(Order, { id, branchId }, {
         preparationStartedAt,
-        status: OrderStatus.IN_PREPARATION,
+        status: newStatus,
       });
 
       if (order.tableId) {
@@ -94,8 +103,22 @@ export class KitchenService {
   async markReady(id: string, branchId: string, userId?: string): Promise<Order> {
     const order = await this.findKitchenOrder(id, branchId);
 
+    // Si la orden ya está lista, no hacer nada
     if (order.readyAt) {
       return order;
+    }
+
+    // Si la orden fue pagada antes de ser marcada lista en cocina,
+    // solo actualizar readyAt sin tocar el status contable
+    if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED || order.completedAt) {
+      const now = new Date();
+      await this.dataSource.query(
+        `UPDATE "order" SET "readyAt" = NOW(), "preparationStartedAt" = COALESCE("preparationStartedAt", NOW()) WHERE id = $1 AND "branchId" = $2 AND "readyAt" IS NULL`,
+        [id, branchId],
+      );
+      this.gateway.emitOrderReady(branchId, { id, orderNumber: order.orderNumber, readyAt: now });
+      this.gateway.emitOrderStatusUpdate(branchId, { id, kitchenState: 'ready', readyAt: now });
+      return this.findKitchenOrder(id, branchId);
     }
 
     const now = new Date();

@@ -76,6 +76,34 @@ type CashMovementItem = {
   createdBy?: { name?: string } | null;
 };
 
+type SalesRangeResponse = {
+  total: number;
+  netSales: number;
+  billedSales: number;
+  billedTotal: number;
+  creditNotesTotal: number;
+  debitNotesTotal: number;
+  creditNotesCount: number;
+  debitNotesCount: number;
+  tax: number;
+  pointsDiscount: number;
+  orders: number;
+  invoicesWithPoints: number;
+  dailyBreakdown: Array<{
+    date: string;
+    orderCount: number;
+    total: number;
+    billedTotal: number;
+    creditNotesTotal: number;
+    debitNotesTotal: number;
+    creditNotesCount: number;
+    debitNotesCount: number;
+    tax: number;
+    pointsDiscount: number;
+    invoicesWithPoints: number;
+  }>;
+};
+
 function toDateInputValue(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -144,7 +172,7 @@ export default function ReportsPage() {
   const to = dateRange === 'custom' ? customTo : today;
   const fileSuffix = `${from || 'all'}_${to || 'all'}`;
 
-  const { data: salesRange } = useQuery({
+  const { data: salesRange } = useQuery<SalesRangeResponse>({
     queryKey: ['reports-sales-range', branchId, from, to],
     queryFn: () =>
       api.get(`/reports/sales-by-range?branchId=${branchId}&from=${from}&to=${to}`).then((r) => r.data),
@@ -248,7 +276,7 @@ export default function ReportsPage() {
     [pointsDiscountRows],
   );
 
-  const net = Number(salesRange?.total || 0) - totalExpenses;
+  const net = Number(salesRange?.netSales || 0) - totalExpenses;
   const totalCashIn = useMemo(
     () => cashMovements.filter((row) => row.direction === 'IN').reduce((sum, row) => sum + Number(row.amount || 0), 0),
     [cashMovements],
@@ -314,8 +342,29 @@ export default function ReportsPage() {
         <div className="bg-amber-500/15 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
           <div className="bg-amber-500/20 rounded-lg p-2 text-2xl flex-shrink-0">💰</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-amber-300 truncate">Ventas facturadas</p>
-            <p className="text-xl font-bold text-amber-100 mt-0.5 truncate">{formatCurrency(salesRange?.total || 0, settings)}</p>
+            <p className="text-xs font-medium text-amber-300 truncate">Ventas netas</p>
+            <p className="text-xl font-bold text-amber-100 mt-0.5 truncate">{formatCurrency(salesRange?.netSales || 0, settings)}</p>
+          </div>
+        </div>
+        <div className="bg-slate-500/15 border border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-slate-300 truncate">Ventas facturadas</p>
+            <p className="text-xl font-bold text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.billedSales || salesRange?.billedTotal || 0, settings)}</p>
+          </div>
+        </div>
+        <div className="bg-rose-500/15 border border-rose-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-rose-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📉</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-rose-300 truncate">NC emitidas</p>
+            <p className="text-xl font-bold text-rose-100 mt-0.5 truncate">{formatCurrency(salesRange?.creditNotesTotal || 0, settings)}</p>
+          </div>
+        </div>
+        <div className="bg-purple-500/15 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-purple-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📈</div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-purple-300 truncate">ND emitidas</p>
+            <p className="text-xl font-bold text-purple-100 mt-0.5 truncate">{formatCurrency(salesRange?.debitNotesTotal || 0, settings)}</p>
           </div>
         </div>
         <div className="bg-slate-500/15 border border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
@@ -354,12 +403,15 @@ export default function ReportsPage() {
           <button
             onClick={() => downloadCsv(
               `reporte_libro_diario_${fileSuffix}.csv`,
-              ['Fecha', 'Facturas', 'Impuestos', 'Descuento puntos', 'Total'],
+              ['Fecha', 'Facturas', 'NC', 'ND', 'Impuestos', 'Descuento puntos', 'Ventas facturadas', 'Ventas netas'],
               (salesRange?.dailyBreakdown || []).map((row: any) => [
                 dateOnly(row.date),
                 row.orderCount,
+                Number(row.creditNotesTotal || 0).toFixed(2),
+                Number(row.debitNotesTotal || 0).toFixed(2),
                 Number(row.tax || 0).toFixed(2),
                 Number(row.pointsDiscount || 0).toFixed(2),
+                Number(row.billedTotal || 0).toFixed(2),
                 Number(row.total || 0).toFixed(2),
               ]),
             )}
@@ -374,9 +426,12 @@ export default function ReportsPage() {
               <tr>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Fecha</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Facturas</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">NC</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">ND</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Impuestos</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Descuento puntos</th>
-                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Total</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Facturado</th>
+                <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Neto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -384,14 +439,17 @@ export default function ReportsPage() {
                 <tr key={row.date}>
                   <td className="px-4 py-2">{dateOnly(row.date)}</td>
                   <td className="px-4 py-2">{row.orderCount}</td>
+                  <td className="px-4 py-2">{formatCurrency(row.creditNotesTotal || 0, settings)}</td>
+                  <td className="px-4 py-2">{formatCurrency(row.debitNotesTotal || 0, settings)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.tax || 0, settings)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.pointsDiscount || 0, settings)}</td>
+                  <td className="px-4 py-2">{formatCurrency(row.billedTotal || 0, settings)}</td>
                   <td className="px-4 py-2 font-semibold">{formatCurrency(row.total || 0, settings)}</td>
                 </tr>
               ))}
               {(salesRange?.dailyBreakdown || []).length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Sin datos para el rango seleccionado.</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">Sin datos para el rango seleccionado.</td>
                 </tr>
               )}
             </tbody>
@@ -701,17 +759,17 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-emerald-500/10 border border-emerald-200 rounded-lg p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Entradas manuales</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-900">{formatCurrency(totalCashIn, settings)}</p>
+        <div className="bg-emerald-500/10 border border-emerald-200 rounded-lg p-4 dark:bg-emerald-500/15 dark:border-emerald-400/60">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Entradas manuales</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-100">{formatCurrency(totalCashIn, settings)}</p>
         </div>
-        <div className="bg-red-500/10 border border-red-200 rounded-lg p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-red-700">Salidas manuales</p>
-          <p className="mt-1 text-2xl font-bold text-red-900">{formatCurrency(totalCashOut, settings)}</p>
+        <div className="bg-red-500/10 border border-red-200 rounded-lg p-4 dark:bg-red-500/15 dark:border-red-400/60">
+          <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">Salidas manuales</p>
+          <p className="mt-1 text-2xl font-bold text-red-900 dark:text-red-100">{formatCurrency(totalCashOut, settings)}</p>
         </div>
-        <div className="bg-slate-500/10 border border-slate-200 rounded-lg p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Turnos registrados</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{cashShifts.length}</p>
+        <div className="bg-slate-500/10 border border-slate-200 rounded-lg p-4 dark:bg-slate-400/10 dark:border-slate-300/40">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">Turnos registrados</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{cashShifts.length}</p>
         </div>
       </div>
 

@@ -42,6 +42,12 @@ interface InvoiceStatus {
   createdAt: string;
 }
 
+interface ExchangeRates {
+  usd: { value: number; buy: number; sell: number };
+  eur: { value: number; dolares: number };
+  fetchedAt: string;
+}
+
 // ─── URLs por defecto ────────────────────────────────────────────────────────
 const SANDBOX_IDP = 'https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/token';
 const SANDBOX_API = 'https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1';
@@ -108,6 +114,13 @@ export default function HaciendaConfigPage() {
     queryFn: () => api.get('/hacienda/status', { params: { branchId: selectedBranch, limit: 50 } }).then((r) => r.data),
     enabled: !!selectedBranch && tab === 'estado',
     refetchInterval: tab === 'estado' ? 15_000 : false,
+  });
+
+  const { data: exchangeRates } = useQuery<ExchangeRates>({
+    queryKey: ['hacienda-exchange-rates', selectedBranch],
+    queryFn: () => api.get('/hacienda/exchange-rates').then((r) => r.data),
+    enabled: !!selectedBranch,
+    refetchInterval: 60_000,
   });
 
   // ─── Mutations ────────────────────────────────────────────────────────────
@@ -279,6 +292,7 @@ export default function HaciendaConfigPage() {
   // ─── Formulario de credenciales ATV ──────────────────────────────────────
   function CredencialesTab() {
     const isSandbox = (cfg?.haciendaEnvironment ?? 'sandbox') === 'sandbox';
+    const [showProductionConfirm, setShowProductionConfirm] = useState(false);
     const [form, setForm] = useState({
       haciendaEnvironment: cfg?.haciendaEnvironment ?? 'sandbox',
       haciendaClientId:    cfg?.haciendaClientId   ?? (isSandbox ? 'api-stag' : 'api'),
@@ -320,7 +334,13 @@ export default function HaciendaConfigPage() {
               <button
                 key={env}
                 type="button"
-                onClick={() => applyEnvironment(env)}
+                onClick={() => {
+                  if (env === 'production' && form.haciendaEnvironment !== 'production') {
+                    setShowProductionConfirm(true);
+                    return;
+                  }
+                  applyEnvironment(env);
+                }}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                   form.haciendaEnvironment === env
                     ? 'bg-brand-600 text-white border-brand-600'
@@ -401,6 +421,39 @@ export default function HaciendaConfigPage() {
 
         {updateMut.isSuccess && <p className="text-sm text-green-600">✓ Guardado correctamente</p>}
         {updateMut.isError   && <p className="text-sm text-red-600">Error al guardar</p>}
+
+        {showProductionConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-xl border border-amber-200 bg-white p-5 shadow-2xl">
+              <h3 className="text-base font-bold text-gray-900">Confirmar cambio a Producción</h3>
+              <p className="mt-2 text-sm text-gray-700">
+                Vas a cambiar del ambiente de pruebas a producción. Los comprobantes emitidos serán legalmente válidos y se enviarán a Hacienda real.
+              </p>
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                Revisa credenciales ATV, certificado .p12 y datos del emisor antes de continuar.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowProductionConfirm(false)}
+                  className="px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyEnvironment('production');
+                    setShowProductionConfirm(false);
+                  }}
+                  className="px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700"
+                >
+                  Sí, cambiar a producción
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
     );
   }
@@ -433,11 +486,29 @@ export default function HaciendaConfigPage() {
     return (
       <div className="space-y-8">
         {/* Estado actual */}
-        <div className={`rounded-xl border p-4 ${cfg?.haciendaP12Loaded ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-          <p className="font-medium text-sm">
+        <div
+          className={`rounded-xl border p-4 ${
+            cfg?.haciendaP12Loaded
+              ? 'border-green-200 bg-green-50 dark:border-green-400/40 dark:bg-green-500/15'
+              : 'border-amber-300 bg-amber-100 dark:border-amber-400/50 dark:bg-amber-500/20'
+          }`}
+        >
+          <p
+            className={`font-medium text-sm ${
+              cfg?.haciendaP12Loaded
+                ? 'text-green-900 dark:text-green-100'
+                : 'text-amber-900 dark:text-amber-100'
+            }`}
+          >
             {cfg?.haciendaP12Loaded ? '✅ Certificado cargado' : '⚠️ Sin certificado — modo contingencia activo'}
           </p>
-          <p className="text-xs text-gray-500 mt-1">
+          <p
+            className={`text-xs mt-1 ${
+              cfg?.haciendaP12Loaded
+                ? 'text-green-700 dark:text-green-300'
+                : 'text-amber-800 dark:text-amber-200'
+            }`}
+          >
             {cfg?.haciendaP12Loaded
               ? 'El certificado de Firma Digital del BCCR está almacenado en el servidor.'
               : 'Suba su archivo .p12 emitido por el BCCR para habilitar la firma electrónica.'}
@@ -731,18 +802,70 @@ export default function HaciendaConfigPage() {
 
       {selectedBranch && !cfgLoading && cfg && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Ambiente</p>
-              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaEnvironment === 'production' ? 'Producción' : 'Sandbox'}</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+            <div className={`rounded-xl border p-3 ${
+              cfg.haciendaEnvironment === 'production'
+                ? 'border-rose-200 bg-rose-50 dark:border-rose-400/40 dark:bg-rose-500/15'
+                : 'border-sky-200 bg-sky-50 dark:border-sky-400/40 dark:bg-sky-500/15'
+            }`}>
+              <p className={`text-xs uppercase tracking-wide font-semibold ${
+                cfg.haciendaEnvironment === 'production'
+                  ? 'text-rose-700 dark:text-rose-300'
+                  : 'text-sky-700 dark:text-sky-300'
+              }`}>Ambiente</p>
+              <p className={`text-sm font-semibold mt-1 ${
+                cfg.haciendaEnvironment === 'production'
+                  ? 'text-rose-900 dark:text-rose-100'
+                  : 'text-sky-900 dark:text-sky-100'
+              }`}>
+                {cfg.haciendaEnvironment === 'production' ? 'Producción' : 'Sandbox'}
+              </p>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Emisión electrónica</p>
-              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaEnabled ? 'Habilitada' : 'Deshabilitada'}</p>
+
+            <div className={`rounded-xl border p-3 ${
+              cfg.haciendaEnabled
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-400/40 dark:bg-emerald-500/15'
+                : 'border-slate-300 bg-slate-100 dark:border-slate-400/40 dark:bg-slate-500/15'
+            }`}>
+              <p className={`text-xs uppercase tracking-wide font-semibold ${
+                cfg.haciendaEnabled
+                  ? 'text-emerald-700 dark:text-emerald-300'
+                  : 'text-slate-700 dark:text-slate-300'
+              }`}>Emisión electrónica</p>
+              <p className={`text-sm font-semibold mt-1 ${
+                cfg.haciendaEnabled
+                  ? 'text-emerald-900 dark:text-emerald-100'
+                  : 'text-slate-900 dark:text-slate-100'
+              }`}>
+                {cfg.haciendaEnabled ? 'Habilitada' : 'Deshabilitada'}
+              </p>
             </div>
-            <div className={`rounded-xl border p-3 ${cfg.haciendaP12Loaded ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-              <p className="text-xs uppercase tracking-wide font-semibold text-gray-600">Firma digital</p>
-              <p className="text-sm font-semibold text-gray-900 mt-1">{cfg.haciendaP12Loaded ? 'Certificado cargado' : 'Pendiente de cargar'}</p>
+
+            <div className={`rounded-xl border p-3 ${
+              cfg.haciendaP12Loaded
+                ? 'border-green-200 bg-green-50 dark:border-green-400/40 dark:bg-green-500/15'
+                : 'border-amber-300 bg-amber-100 dark:border-amber-400/50 dark:bg-amber-500/20'
+            }`}>
+              <p className={`text-xs uppercase tracking-wide font-semibold ${
+                cfg.haciendaP12Loaded
+                  ? 'text-green-700 dark:text-green-300'
+                  : 'text-amber-800 dark:text-amber-200'
+              }`}>Firma digital</p>
+              <p className={`text-sm font-semibold mt-1 ${
+                cfg.haciendaP12Loaded
+                  ? 'text-green-900 dark:text-green-100'
+                  : 'text-amber-900 dark:text-amber-100'
+              }`}>
+                {cfg.haciendaP12Loaded ? 'Certificado cargado' : 'Pendiente de cargar'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-400/40 dark:bg-violet-500/15">
+              <p className="text-xs uppercase tracking-wide font-semibold text-violet-700 dark:text-violet-300">Hacienda 4.4</p>
+              <p className="text-sm font-semibold mt-1 text-violet-900 dark:text-violet-100">
+                USD {exchangeRates?.usd?.value?.toFixed(2) ?? '--'} | EUR {exchangeRates?.eur?.value?.toFixed(2) ?? '--'}
+              </p>
+              <p className="text-[11px] mt-1 text-violet-700 dark:text-violet-300">Tipo de cambio oficial (API Hacienda)</p>
             </div>
           </div>
 

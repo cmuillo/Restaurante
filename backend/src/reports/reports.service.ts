@@ -7,6 +7,8 @@ import { Expense } from '../expenses/entities/expense.entity';
 import { Category } from '../menu/entities/category.entity';
 import { PosShift } from '../pos/entities/pos-shift.entity';
 import { CashMovementDirection, PosCashMovement } from '../pos/entities/pos-cash-movement.entity';
+import { CreditNote, CreditNoteStatus } from '../credit-notes/entities/credit-note.entity';
+import { DebitNote, DebitNoteStatus } from '../debit-notes/entities/debit-note.entity';
 
 @Injectable()
 export class ReportsService {
@@ -17,7 +19,44 @@ export class ReportsService {
     @InjectRepository(Category) private readonly categoryRepository: Repository<Category>,
     @InjectRepository(PosShift) private readonly shiftRepository: Repository<PosShift>,
     @InjectRepository(PosCashMovement) private readonly cashMovementRepository: Repository<PosCashMovement>,
+    @InjectRepository(CreditNote) private readonly creditNoteRepository: Repository<CreditNote>,
+    @InjectRepository(DebitNote) private readonly debitNoteRepository: Repository<DebitNote>,
   ) {}
+
+  private async getNotesAdjustments(branchId: string, from: Date, to: Date): Promise<{
+    creditNotesTotal: number;
+    debitNotesTotal: number;
+    creditNotesCount: number;
+    debitNotesCount: number;
+  }> {
+    const [creditRaw, debitRaw] = await Promise.all([
+      this.creditNoteRepository
+        .createQueryBuilder('cn')
+        .select('COUNT(cn.id)', 'count')
+        .addSelect('COALESCE(SUM(cn.amount), 0)', 'total')
+        .where('cn.branchId = :branchId', { branchId })
+        .andWhere('cn.createdAt >= :from', { from })
+        .andWhere('cn.createdAt < :to', { to })
+        .andWhere('cn.status = :status', { status: CreditNoteStatus.ISSUED })
+        .getRawOne(),
+      this.debitNoteRepository
+        .createQueryBuilder('dn')
+        .select('COUNT(dn.id)', 'count')
+        .addSelect('COALESCE(SUM(dn.amount), 0)', 'total')
+        .where('dn.branchId = :branchId', { branchId })
+        .andWhere('dn.createdAt >= :from', { from })
+        .andWhere('dn.createdAt < :to', { to })
+        .andWhere('dn.status = :status', { status: DebitNoteStatus.ISSUED })
+        .getRawOne(),
+    ]);
+
+    return {
+      creditNotesTotal: parseFloat(creditRaw?.total ?? '0'),
+      debitNotesTotal: parseFloat(debitRaw?.total ?? '0'),
+      creditNotesCount: parseInt(creditRaw?.count ?? '0', 10),
+      debitNotesCount: parseInt(debitRaw?.count ?? '0', 10),
+    };
+  }
 
   private normalizeDateRange(from: Date, to: Date): { fromStart: Date; toExclusive: Date } {
     const fromStart = new Date(from);
@@ -34,8 +73,8 @@ export class ReportsService {
   async dailySales(branchId: string, date: Date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const endOfDayExclusive = new Date(startOfDay);
+    endOfDayExclusive.setDate(endOfDayExclusive.getDate() + 1);
 
     const raw = await this.invoiceRepository
       .createQueryBuilder('inv')
@@ -58,16 +97,24 @@ export class ReportsService {
           ELSE 0 END) AS card_sales`,
       ])
       .where('order.branchId = :branchId', { branchId })
-      .andWhere('inv.createdAt BETWEEN :start AND :end', { start: startOfDay, end: endOfDay })
+      .andWhere('inv.createdAt >= :start', { start: startOfDay })
+      .andWhere('inv.createdAt < :end', { end: endOfDayExclusive })
       .andWhere("inv.status = 'issued'")
       .getRawOne();
 
+    const notes = await this.getNotesAdjustments(branchId, startOfDay, endOfDayExclusive);
+
     const orderCount = parseInt(raw?.order_count ?? '0', 10);
-    const totalSales = parseFloat(raw?.total_sales ?? '0');
+    const billedSales = parseFloat(raw?.total_sales ?? '0');
+    const netSales = billedSales - notes.creditNotesTotal + notes.debitNotesTotal;
     return {
       orderCount,
-      totalSales,
-      avgTicket: orderCount > 0 ? +(totalSales / orderCount).toFixed(2) : 0,
+      totalSales: +netSales.toFixed(2),
+      billedSales: +billedSales.toFixed(2),
+      creditNotesTotal: +notes.creditNotesTotal.toFixed(2),
+      debitNotesTotal: +notes.debitNotesTotal.toFixed(2),
+      netSales: +netSales.toFixed(2),
+      avgTicket: orderCount > 0 ? +(netSales / orderCount).toFixed(2) : 0,
       totalTax: parseFloat(raw?.tax_amount ?? '0'),
       totalTip: parseFloat(raw?.tip_amount ?? '0'),
       totalDiscount: parseFloat(raw?.discount_amount ?? '0'),
@@ -81,46 +128,115 @@ export class ReportsService {
   async salesByRange(branchId: string, from: Date, to: Date) {
     const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
 
-    const rows = await this.invoiceRepository
-      .createQueryBuilder('inv')
-      .leftJoin('inv.order', 'order')
-      .select([
-        "DATE(inv.createdAt) AS date",
-        'COUNT(inv.id) AS invoices',
-        'SUM(inv.total) AS total',
-        'SUM(inv.taxAmount) AS tax',
-        'SUM(order.pointsDiscount) AS points_discount',
-        'SUM(CASE WHEN order.pointsDiscount > 0 THEN 1 ELSE 0 END) AS invoices_with_points',
-      ])
-      .where('order.branchId = :branchId', { branchId })
-      .andWhere('inv.createdAt >= :from', { from: fromStart })
-      .andWhere('inv.createdAt < :to', { to: toExclusive })
-      .andWhere("inv.status = 'issued'")
-      .groupBy("DATE(inv.createdAt)")
-      .orderBy("DATE(inv.createdAt)", 'ASC')
-      .getRawMany();
+    const [invoiceRows, creditRows, debitRows] = await Promise.all([
+      this.invoiceRepository
+        .createQueryBuilder('inv')
+        .leftJoin('inv.order', 'order')
+        .select([
+          "DATE(inv.createdAt) AS date",
+          'COUNT(inv.id) AS invoices',
+          'SUM(inv.total) AS total',
+          'SUM(inv.taxAmount) AS tax',
+          'SUM(order.pointsDiscount) AS points_discount',
+          'SUM(CASE WHEN order.pointsDiscount > 0 THEN 1 ELSE 0 END) AS invoices_with_points',
+        ])
+        .where('order.branchId = :branchId', { branchId })
+        .andWhere('inv.createdAt >= :from', { from: fromStart })
+        .andWhere('inv.createdAt < :to', { to: toExclusive })
+        .andWhere("inv.status = 'issued'")
+        .groupBy("DATE(inv.createdAt)")
+        .orderBy("DATE(inv.createdAt)", 'ASC')
+        .getRawMany(),
+      this.creditNoteRepository
+        .createQueryBuilder('cn')
+        .select("DATE(cn.createdAt)", 'date')
+        .addSelect('COUNT(cn.id)', 'count')
+        .addSelect('COALESCE(SUM(cn.amount), 0)', 'total')
+        .where('cn.branchId = :branchId', { branchId })
+        .andWhere('cn.createdAt >= :from', { from: fromStart })
+        .andWhere('cn.createdAt < :to', { to: toExclusive })
+        .andWhere('cn.status = :status', { status: CreditNoteStatus.ISSUED })
+        .groupBy('DATE(cn.createdAt)')
+        .getRawMany(),
+      this.debitNoteRepository
+        .createQueryBuilder('dn')
+        .select("DATE(dn.createdAt)", 'date')
+        .addSelect('COUNT(dn.id)', 'count')
+        .addSelect('COALESCE(SUM(dn.amount), 0)', 'total')
+        .where('dn.branchId = :branchId', { branchId })
+        .andWhere('dn.createdAt >= :from', { from: fromStart })
+        .andWhere('dn.createdAt < :to', { to: toExclusive })
+        .andWhere('dn.status = :status', { status: DebitNoteStatus.ISSUED })
+        .groupBy('DATE(dn.createdAt)')
+        .getRawMany(),
+    ]);
 
-    const dailyBreakdown = rows.map((r) => ({
-      date: r.date,
-      orderCount: parseInt(r.invoices, 10),
-      total: parseFloat(r.total ?? '0'),
-      tax: parseFloat(r.tax ?? '0'),
-      pointsDiscount: parseFloat(r.points_discount ?? '0'),
-      invoicesWithPoints: parseInt(r.invoices_with_points ?? '0', 10),
-    }));
+    const invoiceMap = new Map(invoiceRows.map((r) => [String(r.date), r]));
+    const creditMap = new Map(creditRows.map((r) => [String(r.date), r]));
+    const debitMap = new Map(debitRows.map((r) => [String(r.date), r]));
+    const allDates = Array.from(new Set([
+      ...invoiceMap.keys(),
+      ...creditMap.keys(),
+      ...debitMap.keys(),
+    ])).sort();
+
+    const dailyBreakdown = allDates.map((dateKey) => {
+      const inv = invoiceMap.get(dateKey);
+      const cn = creditMap.get(dateKey);
+      const dn = debitMap.get(dateKey);
+      const billedTotal = parseFloat(inv?.total ?? '0');
+      const creditNotesTotal = parseFloat(cn?.total ?? '0');
+      const debitNotesTotal = parseFloat(dn?.total ?? '0');
+      const netTotal = billedTotal - creditNotesTotal + debitNotesTotal;
+
+      return {
+        date: dateKey,
+        orderCount: parseInt(inv?.invoices ?? '0', 10),
+        total: +netTotal.toFixed(2),
+        billedTotal: +billedTotal.toFixed(2),
+        creditNotesTotal: +creditNotesTotal.toFixed(2),
+        debitNotesTotal: +debitNotesTotal.toFixed(2),
+        creditNotesCount: parseInt(cn?.count ?? '0', 10),
+        debitNotesCount: parseInt(dn?.count ?? '0', 10),
+        tax: parseFloat(inv?.tax ?? '0'),
+        pointsDiscount: parseFloat(inv?.points_discount ?? '0'),
+        invoicesWithPoints: parseInt(inv?.invoices_with_points ?? '0', 10),
+      };
+    });
 
     const totals = dailyBreakdown.reduce(
       (acc, r) => ({
         total: acc.total + r.total,
+        billedTotal: acc.billedTotal + r.billedTotal,
+        creditNotesTotal: acc.creditNotesTotal + r.creditNotesTotal,
+        debitNotesTotal: acc.debitNotesTotal + r.debitNotesTotal,
+        creditNotesCount: acc.creditNotesCount + r.creditNotesCount,
+        debitNotesCount: acc.debitNotesCount + r.debitNotesCount,
         tax: acc.tax + r.tax,
         pointsDiscount: acc.pointsDiscount + r.pointsDiscount,
         orders: acc.orders + r.orderCount,
         invoicesWithPoints: acc.invoicesWithPoints + r.invoicesWithPoints,
       }),
-      { total: 0, tax: 0, pointsDiscount: 0, orders: 0, invoicesWithPoints: 0 },
+      {
+        total: 0,
+        billedTotal: 0,
+        creditNotesTotal: 0,
+        debitNotesTotal: 0,
+        creditNotesCount: 0,
+        debitNotesCount: 0,
+        tax: 0,
+        pointsDiscount: 0,
+        orders: 0,
+        invoicesWithPoints: 0,
+      },
     );
 
-    return { dailyBreakdown, ...totals };
+    return {
+      dailyBreakdown,
+      ...totals,
+      netSales: +totals.total.toFixed(2),
+      billedSales: +totals.billedTotal.toFixed(2),
+    };
   }
 
   /** Productos más vendidos */
@@ -219,7 +335,7 @@ export class ReportsService {
   async profitLoss(branchId: string, from: Date, to: Date) {
     const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
 
-    const [salesData, expensesData] = await Promise.all([
+    const [salesData, expensesData, notes] = await Promise.all([
       this.invoiceRepository
         .createQueryBuilder('inv')
         .leftJoin('inv.order', 'order')
@@ -237,6 +353,7 @@ export class ReportsService {
         .andWhere('exp.date < :to', { to: toExclusive })
         .groupBy('exp.category')
         .getRawMany(),
+      this.getNotesAdjustments(branchId, fromStart, toExclusive),
     ]);
 
     const totalExpenses = expensesData.reduce(
@@ -244,15 +361,21 @@ export class ReportsService {
       0,
     );
 
+    const billedSales = parseFloat(salesData?.total_sales || '0');
+    const netSales = billedSales - notes.creditNotesTotal + notes.debitNotesTotal;
+
     return {
-      totalSales: parseFloat(salesData?.total_sales || '0'),
+      totalSales: +netSales.toFixed(2),
+      billedSales: +billedSales.toFixed(2),
+      creditNotesTotal: +notes.creditNotesTotal.toFixed(2),
+      debitNotesTotal: +notes.debitNotesTotal.toFixed(2),
       totalTax: parseFloat(salesData?.total_tax || '0'),
       totalExpenses,
       expensesByCategory: expensesData.map((e) => ({
         category: e.category,
         total: parseFloat(e.total_expenses || '0'),
       })),
-      grossProfit: parseFloat(salesData?.total_sales || '0') - totalExpenses,
+      grossProfit: +((netSales) - totalExpenses).toFixed(2),
     };
   }
 
