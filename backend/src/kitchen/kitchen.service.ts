@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { Table, TableStatus } from '../tables/entities/table.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
@@ -112,9 +112,12 @@ export class KitchenService {
     // solo actualizar readyAt sin tocar el status contable
     if (order.status === OrderStatus.COMPLETED || order.status === OrderStatus.CANCELLED || order.completedAt) {
       const now = new Date();
-      await this.dataSource.query(
-        `UPDATE "order" SET "readyAt" = NOW(), "preparationStartedAt" = COALESCE("preparationStartedAt", NOW()) WHERE id = $1 AND "branchId" = $2 AND "readyAt" IS NULL`,
-        [id, branchId],
+      await this.orderRepository.update(
+        { id, branchId, readyAt: IsNull() },
+        {
+          readyAt: now,
+          preparationStartedAt: order.preparationStartedAt ?? now,
+        },
       );
       this.gateway.emitOrderReady(branchId, { id, orderNumber: order.orderNumber, readyAt: now });
       this.gateway.emitOrderStatusUpdate(branchId, { id, kitchenState: 'ready', readyAt: now });
