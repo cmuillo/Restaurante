@@ -18,6 +18,7 @@ export enum PaymentMethod {
   QR = 'qr',
   MIXED = 'mixed',
   CREDIT = 'credit',
+  SINPE = 'sinpe',
 }
 
 @Entity('invoices')

@@ -10,9 +10,10 @@ import { AuditModule } from '../audit/audit.module';
 import { HaciendaModule } from '../hacienda/hacienda.module';
 import { CustomersModule } from '../customers/customers.module';
 import { WebsocketsModule } from '../websockets/websockets.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig, Product]), AuditModule, HaciendaModule, CustomersModule, WebsocketsModule],
+  imports: [TypeOrmModule.forFeature([Invoice, Order, BranchConfig, Product]), AuditModule, HaciendaModule, CustomersModule, WebsocketsModule, SettingsModule],
   controllers: [BillingController],
   providers: [BillingService],
   exports: [BillingService],

@@ -95,6 +95,9 @@ export class ReportsService {
           WHEN inv."paymentMethod" = 'card' THEN inv.total
           WHEN inv."paymentMethod" = 'mixed' THEN COALESCE((inv."paymentDetails"->>'card')::numeric, 0)
           ELSE 0 END) AS card_sales`,
+        `SUM(CASE
+          WHEN inv."paymentMethod" = 'sinpe' THEN inv.total
+          ELSE 0 END) AS sinpe_sales`,
       ])
       .where('order.branchId = :branchId', { branchId })
       .andWhere('inv.createdAt >= :start', { start: startOfDay })
@@ -121,6 +124,7 @@ export class ReportsService {
       pointsDiscount: parseFloat(raw?.points_discount ?? '0'),
       cashSales: parseFloat(raw?.cash_sales ?? '0'),
       cardSales: parseFloat(raw?.card_sales ?? '0'),
+      sinpeSales: parseFloat(raw?.sinpe_sales ?? '0'),
     };
   }
 

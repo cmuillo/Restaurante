@@ -26,6 +26,7 @@ type DailySales = {
   pointsDiscount: number;
   cashSales: number;
   cardSales: number;
+  sinpeSales: number;
 };
 
 type ShiftCurrent = {
@@ -458,6 +459,7 @@ export default function DashboardPage() {
         />
         <StatCard label="Efectivo"          value={formatCurrency(dailySales?.cashSales ?? 0, settings)}    icon="💵" color="green" />
         <StatCard label="Tarjeta"           value={formatCurrency(dailySales?.cardSales ?? 0, settings)}    icon="💳" color="blue" />
+        <StatCard label="SINPE Móvil"        value={formatCurrency(dailySales?.sinpeSales ?? 0, settings)}  icon="📱" color="indigo" />
         <StatCard label="Órdenes"           value={String(dailySales?.orderCount ?? 0)}                     icon="📋" color="purple" />
         <StatCard label="Ticket promedio"   value={formatCurrency(dailySales?.avgTicket ?? 0, settings)}    icon="🧾" color="indigo" />
         <StatCard label="Impuestos"         value={formatCurrency(dailySales?.totalTax ?? 0, settings)}     icon="📑" color="slate" />

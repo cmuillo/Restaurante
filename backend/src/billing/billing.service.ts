@@ -15,6 +15,7 @@ import { Product } from '../menu/entities/product.entity';
 import { Table, TableStatus } from '../tables/entities/table.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { HaciendaExchangeRateService } from '../hacienda/hacienda-exchange-rate.service';
+import { EmailConfigService } from '../settings/services/email-config.service';
 
 @Injectable()
 export class BillingService {
@@ -31,6 +32,7 @@ export class BillingService {
     private readonly customersService: CustomersService,
     private readonly gateway: RestaurantGateway,
     private readonly exchangeRateService: HaciendaExchangeRateService,
+    private readonly emailConfigService: EmailConfigService,
   ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId?: string): Promise<any> {
@@ -409,8 +411,10 @@ export class BillingService {
     if (!cleanEmail) {
       throw new BadRequestException('Debes indicar un correo destino');
     }
-    if (!process.env.SMTP_HOST) {
-      throw new BadRequestException('SMTP no configurado. Define SMTP_HOST para habilitar envio de facturas');
+
+    const emailConfig = await this.emailConfigService.getConfig();
+    if (!emailConfig.isEnabled || !emailConfig.smtpHost) {
+      throw new BadRequestException('El servicio de correo no está configurado. Actívalo en Configuración → Correo electrónico.');
     }
 
     const invoice = await this.invoiceRepository.findOne({
@@ -422,16 +426,16 @@ export class BillingService {
     }
 
     const pdfBuffer = await this.generateInvoicePdf(invoice);
-    const smtpPass = String(process.env.SMTP_PASS ?? '').replace(/\s+/g, '');
+    const smtpPass = String(emailConfig.smtpPassword ?? '').replace(/\s+/g, '');
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT ?? 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: { user: process.env.SMTP_USER, pass: smtpPass },
+      host: emailConfig.smtpHost,
+      port: emailConfig.smtpPort ?? 587,
+      secure: emailConfig.smtpSecure ?? false,
+      auth: { user: emailConfig.smtpUser, pass: smtpPass },
     });
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+      from: `${emailConfig.senderName} <${emailConfig.senderEmail}>`,
       to: cleanEmail,
       subject: `Factura ${invoice.invoiceNumber}`,
       html: `

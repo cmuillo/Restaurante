@@ -137,6 +137,7 @@ function labelPaymentMethod(value?: string): string {
   if (value === 'qr') return 'QR';
   if (value === 'transfer') return 'Transferencia';
   if (value === 'mixed') return 'Mixto';
+  if (value === 'sinpe') return 'SINPE Móvil';
   return 'No indicado';
 }
 

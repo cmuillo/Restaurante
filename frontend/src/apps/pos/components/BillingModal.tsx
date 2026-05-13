@@ -49,7 +49,7 @@ interface BillingModalProps {
   onCancelled?: () => void;
 }
 
-export type PaymentMethod = 'cash' | 'card' | 'mixed';
+export type PaymentMethod = 'cash' | 'card' | 'mixed' | 'sinpe';
 
 interface PrintableInvoiceItem {
   productName: string;
@@ -595,8 +595,8 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               {/* Método de pago */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Método de pago</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['cash', 'card', 'mixed'] as const).map((method) => (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['cash', 'card', 'sinpe', 'mixed'] as const).map((method) => (
                     <button
                       key={method}
                       onClick={() => {
@@ -616,7 +616,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {method === 'cash' ? '💵 Efectivo' : method === 'card' ? '💳 Tarjeta' : '🔀 Mixto'}
+                      {method === 'cash' ? '💵 Efectivo' : method === 'card' ? '💳 Tarjeta' : method === 'sinpe' ? '📱 SINPE' : '🔀 Mixto'}
                     </button>
                   ))}
                 </div>

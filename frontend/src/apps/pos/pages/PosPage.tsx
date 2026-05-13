@@ -169,6 +169,7 @@ function formatPaymentMethod(value?: string): string {
   if (value === 'qr') return 'QR';
   if (value === 'mixed') return 'Mixto';
   if (value === 'transfer') return 'Transferencia';
+  if (value === 'sinpe') return 'SINPE Móvil';
   return 'No indicado';
 }
 

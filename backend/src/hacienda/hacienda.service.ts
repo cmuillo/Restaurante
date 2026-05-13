@@ -56,6 +56,7 @@ function mapPaymentMethod(pm: PaymentMethod): '01' | '02' | '04' | '05' | '06' {
     [PaymentMethod.QR]: '04',
     [PaymentMethod.MIXED]: '05',
     [PaymentMethod.CREDIT]: '06',
+    [PaymentMethod.SINPE]: '04',
   };
   return map[pm] ?? '05'; // Defecto: otro (05)
 }
