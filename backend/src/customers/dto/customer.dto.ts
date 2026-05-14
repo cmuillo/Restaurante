@@ -49,6 +49,17 @@ export class CreateCustomerDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ApiProperty({ required: false, description: 'Exonerado de IVA' })
+  @IsOptional()
+  @IsBoolean()
+  isExempt?: boolean;
+
+  @ApiProperty({ required: false, description: 'Número de documento de exoneración' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  exemptDocNumber?: string;
 }
 
 export class UpdateCustomerDto {
@@ -104,4 +115,15 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({ required: false, description: 'Exonerado de IVA' })
+  @IsOptional()
+  @IsBoolean()
+  isExempt?: boolean;
+
+  @ApiProperty({ required: false, description: 'Número de documento de exoneración' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  exemptDocNumber?: string;
 }

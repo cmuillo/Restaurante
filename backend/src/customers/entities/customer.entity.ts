@@ -43,6 +43,12 @@ export class Customer {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ default: false })
+  isExempt: boolean; // Exonerado de IVA
+
+  @Column({ length: 100, nullable: true })
+  exemptDocNumber: string; // Número de documento de exoneración (Hacienda)
+
   @CreateDateColumn()
   createdAt: Date;
 

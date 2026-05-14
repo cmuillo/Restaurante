@@ -42,6 +42,7 @@ interface PendingOrder {
     code: string;
     email?: string;
     loyaltyPoints: number;
+    isExempt?: boolean;
   } | null;
   invoice?: { id: string } | null;
   items: PendingOrderItem[];
@@ -74,6 +75,7 @@ interface Customer {
   email?: string;
   phone?: string;
   loyaltyPoints: number;
+  isExempt?: boolean;
 }
 
 interface InvoiceHistoryItem {
@@ -295,6 +297,7 @@ export default function PosPage() {
   const settings = useSettings();
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<UiOrderType>('DINE_IN');
   const [tableId, setTableId] = useState('');
@@ -1364,32 +1367,55 @@ export default function PosPage() {
 
           <div className="flex-1 min-h-0 flex flex-col xl:flex-row">
             <div className="flex-[3] min-h-0 min-w-0 flex flex-col overflow-hidden">
-              <div className="bg-white border-b border-gray-200 px-4 py-2 flex gap-2 overflow-x-auto">
-                <button
-                  onClick={() => setActiveCategory(null)}
-                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
-                    !activeCategory ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  Todos
-                </button>
-                {categories.map((c: { id: string; name: string }) => (
+              <div className="bg-white border-b border-gray-200 px-3 py-2 flex flex-col gap-2">
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setActiveCategory(null); }}
+                    placeholder="Buscar por nombre o código..."
+                    className="w-full pl-7 pr-7 py-1.5 text-xs border border-gray-200 rounded-full bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                    >✕</button>
+                  )}
+                </div>
+                <div className="flex gap-2 overflow-x-auto">
                   <button
-                    key={c.id}
-                    onClick={() => setActiveCategory(c.id)}
+                    onClick={() => { setActiveCategory(null); setSearchQuery(''); }}
                     className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
-                      activeCategory === c.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+                      !activeCategory && !searchQuery ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {c.name}
+                    Todos
                   </button>
-                ))}
+                  {categories.map((c: { id: string; name: string }) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setActiveCategory(c.id); setSearchQuery(''); }}
+                      className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
+                        activeCategory === c.id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 content-start">
                 {products
-                  .filter((p: { isActive: boolean }) => p.isActive)
-                  .map((p: { id: string; name: string; price: number; imageUrl?: string; taxRate?: number }) => (
+                  .filter((p: { isActive: boolean; name: string; sku?: string }) => {
+                    if (!p.isActive) return false;
+                    if (!searchQuery) return true;
+                    const q = searchQuery.toLowerCase();
+                    return p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q);
+                  })
+                  .map((p: { id: string; name: string; price: number; imageUrl?: string; taxRate?: number; description?: string; sku?: string }) => (
                     <button
                       key={p.id}
                       onClick={() => addToCart(p)}
@@ -1404,6 +1430,7 @@ export default function PosPage() {
                       <div className="absolute bottom-0 left-0 right-0 p-2">
                         <p className="text-xs font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
                         <p className="text-sm font-bold text-orange-300 mt-0.5">{formatCurrency(p.price, settings)}</p>
+                        {p.description && <p className="text-[10px] text-gray-300 mt-0.5 line-clamp-2 leading-tight">{p.description}</p>}
                       </div>
                     </button>
                   ))}

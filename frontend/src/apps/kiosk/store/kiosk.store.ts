@@ -15,6 +15,7 @@ export interface KioskCustomer {
   code: string;
   name: string;
   loyaltyPoints: number;
+  isExempt?: boolean;
 }
 
 export interface CartItem {

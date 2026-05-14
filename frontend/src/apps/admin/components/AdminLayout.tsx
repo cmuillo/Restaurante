@@ -14,6 +14,7 @@ const navItems = [
   { to: '/tables', label: 'Mesas', icon: '🪑' },
   { to: '/orders', label: 'Órdenes', icon: '📋' },
   { to: '/invoices', label: 'Facturas', icon: '🧾' },
+  { to: '/quotations', label: 'Cotizaciones', icon: '📝' },
   { to: '/expenses', label: 'Gastos', icon: '💸' },
   { to: '/customers', label: 'Clientes', icon: '👥' },
   { to: '/reports', label: 'Reportes', icon: '📈' },

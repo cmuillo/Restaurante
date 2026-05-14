@@ -22,6 +22,7 @@ import { SettingsModule } from './settings/settings.module';
 
 import { CreditNotesModule } from './credit-notes/credit-notes.module';
 import { DebitNotesModule } from './debit-notes/debit-notes.module';
+import { QuotationsModule } from './quotations/quotations.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { DebitNotesModule } from './debit-notes/debit-notes.module';
     SettingsModule,
     CreditNotesModule,
     DebitNotesModule,
+    QuotationsModule,
   ],
 })
 export class AppModule {}

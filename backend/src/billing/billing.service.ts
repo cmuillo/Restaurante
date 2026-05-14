@@ -90,6 +90,17 @@ export class BillingService {
       let orderSubtotal = Number(order.subtotal || 0);
       let pointsDiscount = 0;
       let pointsUsed = 0;
+      let isCustomerExempt = false;
+
+      // Aplicar exoneración de IVA si el cliente está marcado como exonerado
+      if (order.customerId) {
+        const exemptCustomer = await manager.findOne(Customer, { where: { id: order.customerId } });
+        if (exemptCustomer?.isExempt) {
+          isCustomerExempt = true;
+          orderTotal = Math.max(0, orderTotal - orderTaxAmount);
+          orderTaxAmount = 0;
+        }
+      }
 
       // Procesar puntos si el cliente existe
       if (order.customerId && dto.pointsUsed && dto.pointsUsed > 0) {
@@ -232,10 +243,11 @@ export class BillingService {
 
       const printableItems = (order.items || []).map((item) => {
         const lineSubtotal = Number(item.subtotal || 0);
-        const explicitTaxRate = item.taxRate == null ? null : Number(item.taxRate);
-        const effectiveTaxRate = explicitTaxRate == null
-          ? (orderSubtotal > 0 ? (orderTaxAmount / orderSubtotal) * 100 : 0)
-          : explicitTaxRate;
+        const effectiveTaxRate = isCustomerExempt
+          ? 0
+          : item.taxRate == null
+            ? (orderSubtotal > 0 ? (Number(order.taxAmount || 0) / orderSubtotal) * 100 : 0)
+            : Number(item.taxRate);
         const lineTaxAmount = lineSubtotal * (effectiveTaxRate / 100);
 
         return {

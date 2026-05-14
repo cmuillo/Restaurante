@@ -316,13 +316,22 @@ export default function MenuPage() {
   }
 
   function applyCabysSuggestion(item: CabysCatalogItem) {
-    setProdForm((prev) => ({
-      ...prev,
-      cabysCode: item.code,
-      taxCode: prev.taxCode || item.suggestedTaxCode,
-      taxRate: prev.taxRate === '' ? String(item.suggestedTaxRate) : prev.taxRate,
-      unitOfMeasure: prev.unitOfMeasure || item.suggestedUnitOfMeasure,
-    }));
+    setProdForm((prev) => {
+      const newTaxRate = String(item.suggestedTaxRate);
+      const sp = Number(prev.salePrice);
+      const newBase =
+        prev.salePrice !== '' && !isNaN(sp) && item.suggestedTaxRate > 0
+          ? (sp / (1 + item.suggestedTaxRate / 100)).toFixed(2)
+          : prev.price;
+      return {
+        ...prev,
+        cabysCode: item.code,
+        taxCode: item.suggestedTaxCode,
+        taxRate: newTaxRate,
+        unitOfMeasure: item.suggestedUnitOfMeasure,
+        price: newBase,
+      };
+    });
     setCabysQuery(item.code);
     setProdFieldErrors((prev) => ({ ...prev, cabysCode: '' }));
   }
@@ -665,9 +674,15 @@ export default function MenuPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Código CABYS</label>
                   {prodForm.cabysCode && (
-                    <p className="text-xs font-mono text-brand-400 bg-brand-600/10 border border-brand-500/20 rounded-lg px-2 py-1 mb-2">
-                      Seleccionado: {prodForm.cabysCode}
-                    </p>
+                    <div className="flex items-start gap-2 bg-brand-600/10 border border-brand-500/20 rounded-lg px-2 py-1.5 mb-2">
+                      <span className="text-brand-400 mt-px">✓</span>
+                      <div>
+                        <p className="text-xs font-mono text-brand-400">{prodForm.cabysCode}</p>
+                        <p className="text-[10px] text-brand-300/70 mt-0.5">
+                          Auto: IVA {prodForm.taxRate || '—'}% · {prodForm.unitOfMeasure} · Cód. imp. {prodForm.taxCode}
+                        </p>
+                      </div>
+                    </div>
                   )}
                   <input
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
@@ -737,13 +752,18 @@ export default function MenuPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Tipo cod. comercial</label>
-                    <input
-                      maxLength={2}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    <select
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.commercialCodeType}
                       onChange={(e) => { setProdForm({ ...prodForm, commercialCodeType: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, commercialCodeType: '' })); }}
-                      placeholder="04"
-                    />
+                    >
+                      <option value="01">01 — Cód. barras (EAN)</option>
+                      <option value="02">02 — Farmacéutico</option>
+                      <option value="03">03 — Ministerio</option>
+                      <option value="04">04 — Interno</option>
+                      <option value="05">05 — CUP</option>
+                      <option value="99">99 — Otros</option>
+                    </select>
                     {prodFieldErrors.commercialCodeType && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.commercialCodeType}</p>}
                   </div>
                   <div>
@@ -757,14 +777,17 @@ export default function MenuPage() {
                     {prodFieldErrors.commercialCode && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.commercialCode}</p>}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Codigo impuesto</label>
-                    <input
-                      maxLength={2}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Código impuesto</label>
+                    <select
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition"
                       value={prodForm.taxCode}
                       onChange={(e) => { setProdForm({ ...prodForm, taxCode: e.target.value }); setProdFieldErrors((prev) => ({ ...prev, taxCode: '' })); }}
-                      placeholder="01"
-                    />
+                    >
+                      <option value="01">01 — IVA</option>
+                      <option value="02">02 — Imp. Selectivo</option>
+                      <option value="07">07 — IVA especial</option>
+                      <option value="99">99 — Otros</option>
+                    </select>
                     {prodFieldErrors.taxCode && <p className="text-xs text-red-400 mt-1">{prodFieldErrors.taxCode}</p>}
                   </div>
                 </div>

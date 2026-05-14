@@ -360,3 +360,89 @@ npm run test:hacienda:sandbox
 ---
 
 **Conclusión**: El sistema está **86% compatible con Hacienda 4.4**. Las mejoras recomendadas son **progresivas** y **no críticas para producción**, pero se recomienda implementarlas en las próximas 4 semanas para máxima compatibilidad.
+
+---
+
+## ⚖️ ANÁLISIS: RÉGIMEN SIMPLIFICADO vs RÉGIMEN TRADICIONAL
+
+**Fecha de análisis**: 14 de mayo de 2026
+
+---
+
+### 1. ¿Cuál es la diferencia?
+
+| Dimensión | Régimen Tradicional (General) | Régimen Simplificado |
+|---|---|---|
+| **¿Quién aplica?** | Mayoría de contribuyentes: empresas, profesionales, restaurantes con servicio de mesa | Pequeños contribuyentes en actividades específicas con ventas anuales bajas |
+| **¿Cómo paga impuestos?** | Calcula IVA (ventas − compras) y renta sobre utilidad real | Aplica un **factor fijo** sobre el total de **compras brutas** del trimestre |
+| **Declaraciones** | Mensual (IVA) + anual (renta) | **Trimestral** (IVA y renta juntos en un solo formulario D-105) |
+| **Comprobantes electrónicos** | **Obligatorio** emitir FE/TE por cada venta | **No aplica** — no emite comprobantes electrónicos al cliente |
+| **IVA al cliente** | Lo cobra (13%, 4%, 2%, 1%) y lo traslada a Hacienda | **No cobra IVA** — lo absorbe en el factor de compras |
+| **Certificado .p12 / XAdES** | Obligatorio para firmar XML | **No necesario** |
+| **API Hacienda (recepción)** | Obligatorio (POST /recepcion/v1) | **No necesario** |
+| **CABYS por línea** | Requerido/recomendado | **No aplica** |
+| **Contabilidad** | Registro completo de ventas y compras | Solo registro de **compras** (Libro de Compras obligatorio) |
+| **Umbral de ingresos** | Sin límite máximo | Límite anual por actividad (ej: restaurantes sin servicio ≈ ₡106M CRC) |
+| **Exclusiones** | Ninguna | Actividades CABYS 561101 (restaurante con servicio completo) **están excluidas** |
+
+---
+
+### 2. ¿Cómo funciona el Régimen Simplificado en la práctica?
+
+El contribuyente en RS **no factura electrónicamente**. En cambio:
+1. Registra todas sus **compras** (insumos, mercadería) durante el trimestre.
+2. Al cierre del trimestre, aplica un **factor** definido por Hacienda según su actividad:
+   - Ej: actividad de comida rápida sin servicio → factor ≈ 0.25 sobre compras
+   - El factor cubre tanto IVA como renta en una sola liquidación.
+3. Presenta el formulario **D-105** ante Hacienda y paga el monto resultante.
+4. No necesita XAdES, .p12, CABYS, ni API de comprobantes.
+
+---
+
+### 3. ¿El sistema actual es compatible con Régimen Simplificado?
+
+**Respuesta directa: NO. El sistema está diseñado exclusivamente para el Régimen Tradicional.**
+
+| # | Requisito del Régimen Simplificado | ¿Lo tiene el sistema? | Severidad |
+|---|---|---|---|
+| 1 | Flag de régimen por sucursal (`simplificado` / `general`) | ❌ No existe | 🔴 CRÍTICO |
+| 2 | Bypass total del flujo de comprobantes electrónicos cuando RS activo | ❌ No existe — siempre intenta enviar a Hacienda | 🔴 CRÍTICO |
+| 3 | No cobrar IVA en líneas de venta cuando RS activo | ❌ Siempre calcula IVA | 🔴 CRÍTICO |
+| 4 | Módulo de registro de **compras** (proveedores, montos) | ❌ No existe | 🔴 CRÍTICO |
+| 5 | Tabla de **factores por actividad** (Hacienda D-105) | ❌ No existe | 🔴 CRÍTICO |
+| 6 | Cálculo del impuesto trimestral (compras × factor) | ❌ No existe | 🔴 CRÍTICO |
+| 7 | Reporte D-105 trimestral | ❌ No existe | 🟡 ALTA |
+| 8 | Libro de compras exportable (CSV/Excel) | ❌ No existe | 🟡 ALTA |
+| 9 | Recibo simplificado (sin firma XAdES, sin XML Hacienda) | ❌ No existe — solo FE/TE | 🟡 ALTA |
+| 10 | Declaración de período (trimestre vs mes) | ❌ Toda la reportería es mensual/diaria | 🟡 ALTA |
+
+---
+
+### 4. Nota legal importante ⚠️
+
+> **Los restaurantes con servicio de mesa completo (CABYS 561101) están EXCLUIDOS del Régimen Simplificado** según la legislación vigente de Hacienda CR. Esto aplica directamente a este sistema cuya actividad por defecto es `561101 - Restaurantes con servicio completo`.
+>
+> El Régimen Simplificado es viable únicamente para:
+> - Sodas pequeñas / puestos de comida **sin servicio de mesa** (CABYS 561102 o similares)
+> - Ventas por debajo del umbral anual establecido por Hacienda
+> - Actividades expresamente permitidas en el listado vigente de RS
+>
+> **Recomendación**: Antes de implementar soporte para RS, verificar con un contador o asesor tributario si la actividad específica del negocio califica.
+
+---
+
+### 5. Resumen de faltantes para RS (si se decidiera implementar)
+
+| Prioridad | Componente a crear/modificar | Esfuerzo estimado |
+|---|---|---|
+| 🔴 1 | Campo `regimeType: 'general' \| 'simplificado'` en `BranchConfig` | 2h |
+| 🔴 2 | Lógica condicional en `BillingService`: si RS → no llama a Hacienda | 3h |
+| 🔴 3 | Lógica condicional en precios: si RS → `taxRate = 0` en todas las líneas | 2h |
+| 🔴 4 | Módulo `purchases` (entidad, CRUD, importación de compras) | 12h |
+| 🔴 5 | Tabla de factores RS por código de actividad económica | 3h |
+| 🟡 6 | Cálculo automático del D-105 trimestral | 8h |
+| 🟡 7 | Reporte exportable Libro de Compras (PDF/CSV) | 6h |
+| 🟡 8 | Recibo simplificado (sin XML Hacienda, solo impresión interna) | 4h |
+| 🟡 9 | UI en Admin: selección de régimen por sucursal | 3h |
+| 🟢 10 | Alertas automáticas al acercarse al umbral anual del RS | 4h |
+| | **Total estimado** | **~47 horas** |

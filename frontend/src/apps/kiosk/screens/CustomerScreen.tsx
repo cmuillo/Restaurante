@@ -12,6 +12,7 @@ interface CustomerData {
   code: string;
   name: string;
   loyaltyPoints: number;
+  isExempt?: boolean;
 }
 
 type QrStatus = 'idle' | 'starting' | 'scanning' | 'found' | 'error';
@@ -173,6 +174,7 @@ export default function CustomerScreen() {
       code: foundCustomer.code,
       name: foundCustomer.name,
       loyaltyPoints: foundCustomer.loyaltyPoints,
+      isExempt: foundCustomer.isExempt,
     };
     setCustomer(customer); // navigates to ORDER_TYPE
   };

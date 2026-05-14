@@ -15,6 +15,7 @@ import CustomersPage from './pages/CustomersPage';
 import HaciendaConfigPage from './pages/HaciendaConfigPage';
 import InvoicesPage from './pages/InvoicesPage';
 import SettingsPage from './pages/SettingsPage';
+import QuotationsPage from './pages/QuotationsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -39,6 +40,7 @@ function AppContent() {
         <Route path="tables" element={<TablesPage />} />
         <Route path="orders" element={<OrdersPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
+        <Route path="quotations" element={<QuotationsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="branches" element={<BranchesPage />} />
         <Route path="reports" element={<ReportsPage />} />

@@ -10,10 +10,11 @@ export default function CartScreen({
   t: Strings;
   isPending: boolean;
 }) {
-  const { cart, removeFromCart, goTo } = useKioskStore();
+  const { cart, removeFromCart, goTo, customer } = useKioskStore();
   const settings = useSettings();
+  const isExempt = customer?.isExempt ?? false;
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  const taxAmount = cart.reduce((s, i) => s + i.price * i.quantity * (i.taxRate / 100), 0);
+  const taxAmount = isExempt ? 0 : cart.reduce((s, i) => s + i.price * i.quantity * (i.taxRate / 100), 0);
   const total = subtotal + taxAmount;
 
   return (
@@ -41,8 +42,8 @@ export default function CartScreen({
               {item.notes && <p className="text-sm text-yellow-400 mt-0.5">📝 {item.notes}</p>}
             </div>
             <div className="text-right">
-              <p className="text-base text-gray-400">{item.quantity}× {formatCurrency(item.price * (1 + item.taxRate / 100), settings)}</p>
-              <p className="text-xl font-bold text-brand-400">{formatCurrency(item.price * (1 + item.taxRate / 100) * item.quantity, settings)}</p>
+              <p className="text-base text-gray-400">{item.quantity}× {formatCurrency(item.price * (isExempt ? 1 : (1 + item.taxRate / 100)), settings)}</p>
+              <p className="text-xl font-bold text-brand-400">{formatCurrency(item.price * (isExempt ? 1 : (1 + item.taxRate / 100)) * item.quantity, settings)}</p>
             </div>
             <button
               onClick={() => removeFromCart(item.productId)}

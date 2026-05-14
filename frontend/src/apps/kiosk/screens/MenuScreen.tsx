@@ -99,6 +99,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-8 pb-3 px-3">
                   <p className="text-sm font-semibold text-white line-clamp-2 leading-tight">{p.name}</p>
                   <p className="text-base font-bold text-brand-400 mt-0.5">{formatCurrency(salePrice, settings)}</p>
+                  {p.description && <p className="text-xs text-gray-300 mt-0.5 line-clamp-2 leading-tight">{p.description}</p>}
                 </div>
               </button>
             );

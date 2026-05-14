@@ -43,6 +43,7 @@ interface BillingModalProps {
     code: string;
     email?: string;
     loyaltyPoints: number;
+    isExempt?: boolean;
   } | null;
   initialStep?: 'payment' | 'cancelling';
   onClose: () => void;
@@ -236,7 +237,10 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   useEffect(() => {
     if (!isOpen || !order) return;
     setPaymentMethod('cash');
-    setCashReceived(toAmount(order.total));
+    const isExempt = !!(customer?.isExempt);
+    const orderTotal = toAmount(order.total);
+    const orderTaxAmount = toAmount(order.taxAmount);
+    setCashReceived(isExempt ? Math.max(0, orderTotal - orderTaxAmount) : orderTotal);
     setMixedCashAmount(0);
     setMixedCashReceived(0);
     setInvoiceEmail(customer?.email || order.customer?.email || '');
@@ -286,7 +290,11 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   // Mantiene el efectivo sugerido alineado al total final cuando cambia el descuento por puntos.
   useEffect(() => {
     if (!isOpen || !order) return;
-    const effectiveTotal = Math.max(0, toAmount(order.total) - (usePoints ? pointsToUse : 0));
+    const isExempt = !!(customer?.isExempt);
+    const orderTotal = toAmount(order.total);
+    const orderTaxAmount = toAmount(order.taxAmount);
+    const baseTotal = isExempt ? Math.max(0, orderTotal - orderTaxAmount) : orderTotal;
+    const effectiveTotal = Math.max(0, baseTotal - (usePoints ? pointsToUse : 0));
     if (paymentMethod === 'cash') {
       setCashReceived(effectiveTotal);
       return;
@@ -296,7 +304,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
       setMixedCashAmount(suggestedCash);
       setMixedCashReceived(suggestedCash);
     }
-  }, [isOpen, order, paymentMethod, usePoints, pointsToUse]);
+  }, [isOpen, order, paymentMethod, usePoints, pointsToUse]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancelOrder = useMutation({
     mutationFn: () => {
@@ -352,9 +360,12 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   const tipAmount = toAmount(order.tipAmount);
   const discountAmount = toAmount(order.discountAmount);
   const total = toAmount(order.total);
+  const isCustomerExempt = !!(customer?.isExempt);
+  const effectiveTaxAmount = isCustomerExempt ? 0 : taxAmount;
+  const effectiveTotal = isCustomerExempt ? Math.max(0, total - taxAmount) : total;
   const availableLoyaltyPoints = customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0;
-  const maxPointsAllowed = Math.min(availableLoyaltyPoints, Math.max(0, total));
-  const discountedTotal = Math.max(0, total - (usePoints ? pointsToUse : 0));
+  const maxPointsAllowed = Math.min(availableLoyaltyPoints, Math.max(0, effectiveTotal));
+  const discountedTotal = Math.max(0, effectiveTotal - (usePoints ? pointsToUse : 0));
   const change = paymentMethod === 'cash' ? Math.max(0, cashReceived - discountedTotal) : 0;
   const mixedCardAmount = Math.max(0, discountedTotal - mixedCashAmount);
   const mixedChange = paymentMethod === 'mixed' ? Math.max(0, mixedCashReceived - mixedCashAmount) : 0;
@@ -451,10 +462,16 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-medium">{formatCurrency(subtotal, settings)}</span>
                 </div>
-                {taxAmount > 0 && (
+                {effectiveTaxAmount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Impuestos</span>
-                    <span className="font-medium">{formatCurrency(taxAmount, settings)}</span>
+                    <span className="font-medium">{formatCurrency(effectiveTaxAmount, settings)}</span>
+                  </div>
+                )}
+                {isCustomerExempt && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-amber-600 font-medium">Impuestos (Exonerado)</span>
+                    <span className="font-medium text-amber-600">₡0,00</span>
                   </div>
                 )}
                 {tipAmount > 0 && (
@@ -499,6 +516,11 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                   <p className="text-sm text-indigo-800">{customer?.name || order.customer?.name}</p>
                   <p className="text-xs text-indigo-700">Código: {customer?.code || order.customer?.code || 'N/A'}</p>
                   <p className="text-xs text-indigo-700">Puntos actuales: {customer?.loyaltyPoints ?? order.customer?.loyaltyPoints ?? 0}</p>
+                  {isCustomerExempt && (
+                    <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      Exonerado de IVA
+                    </span>
+                  )}
                 </div>
               )}
 
