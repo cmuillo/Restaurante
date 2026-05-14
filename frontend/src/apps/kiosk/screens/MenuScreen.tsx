@@ -10,6 +10,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
   const { goTo, selectProduct, cart, customer } = useKioskStore();
   const settings = useSettings();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const isExempt = customer?.isExempt ?? false;
 
   const { data: menu } = useQuery({
     queryKey: ['kiosk-menu', branchId],
@@ -25,8 +26,10 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
     : products;
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  // Total con IVA para mostrar al cliente
-  const cartTotal = cart.reduce((s, i) => s + i.price * (1 + i.taxRate / 100) * i.quantity, 0);
+  const cartTotal = cart.reduce(
+    (s, i) => s + i.price * (isExempt ? 1 : (1 + i.taxRate / 100)) * i.quantity,
+    0,
+  );
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-900">
@@ -83,7 +86,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
       <div className="flex-1 overflow-y-auto p-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-max">
           {filtered.map((p) => {
-            const salePrice = p.price * (1 + (p.taxRate ?? 0) / 100);
+            const salePrice = p.price;
             return (
               <button
                 key={p.id}

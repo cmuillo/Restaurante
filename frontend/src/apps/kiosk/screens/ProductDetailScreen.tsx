@@ -37,9 +37,10 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
   }, 0);
 
   const taxRate: number = product.taxRate ?? 0;
-  const baseUnitPrice = Number(product.price) + extraPrice;
-  // Precio con IVA para mostrar al cliente
-  const unitTotal = baseUnitPrice * (1 + taxRate / 100) * quantity;
+  // product.price es el precio de venta (con IVA); convertir a base para enviar al backend
+  const salePriceUnit = Number(product.price) + extraPrice;
+  const baseUnitPrice = taxRate > 0 ? salePriceUnit / (1 + taxRate / 100) : salePriceUnit;
+  const unitTotal = salePriceUnit * quantity;
 
   const handleAdd = () => {
     const modifiersList = Object.entries(selectedModifiers).map(([modId, optId]) => {

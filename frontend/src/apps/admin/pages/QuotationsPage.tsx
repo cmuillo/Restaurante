@@ -215,7 +215,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10 flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-orange-500/20 flex items-center justify-center text-orange-400 text-lg">
+          <div className="w-9 h-9 rounded-xl bg-brand-600/20 flex items-center justify-center text-brand-400 text-lg">
             📝
           </div>
           <h3 className="text-base font-semibold text-white flex-1">
@@ -426,7 +426,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-lg text-sm font-medium bg-orange-600 hover:bg-orange-500 text-white disabled:opacity-50 transition-colors"
+            className="px-5 py-2 rounded-lg text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 transition-colors"
           >
             {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear cotización'}
           </button>
@@ -523,7 +523,7 @@ export default function QuotationsPage() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-sm font-medium rounded-xl transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl transition-colors"
         >
           <span>+</span> Nueva Cotización
         </button>
@@ -537,7 +537,7 @@ export default function QuotationsPage() {
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
-                ? 'bg-orange-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
             }`}
           >

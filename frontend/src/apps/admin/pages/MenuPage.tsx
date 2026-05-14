@@ -288,14 +288,14 @@ export default function MenuPage() {
     setEditProd(p);
     setCabysQuery(p.cabysCode ?? '');
     const taxRateNum = p.taxRate ?? 0;
-    const basePriceNum = Number(p.price);
-    const salePriceNum = taxRateNum > 0 ? basePriceNum * (1 + taxRateNum / 100) : 0;
+    const salePriceNum = Number(p.price);
+    const basePriceNum = taxRateNum > 0 ? salePriceNum / (1 + taxRateNum / 100) : salePriceNum;
     setImageUploadError('');
     setProdForm({
       name: p.name,
       description: p.description ?? '',
-      price: String(p.price),
-      salePrice: taxRateNum > 0 ? salePriceNum.toFixed(2) : String(p.price),
+      price: basePriceNum.toFixed(2),
+      salePrice: salePriceNum.toFixed(2),
       sku: p.sku ?? '',
       categoryId: p.categoryId ?? '',
       imageUrl: p.imageUrl ?? '',
@@ -379,7 +379,7 @@ export default function MenuPage() {
     return {
       name: prodForm.name,
       description: prodForm.description || undefined,
-      price: Number(prodForm.price),
+      price: Number(prodForm.salePrice),
       sku: prodForm.sku || undefined,
       categoryId: prodForm.categoryId,
       imageUrl: prodForm.imageUrl || undefined,

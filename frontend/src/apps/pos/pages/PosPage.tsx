@@ -570,9 +570,11 @@ export default function PosPage() {
           i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i,
         );
       }
+      const taxRate = product.taxRate ?? 0;
+      const basePrice = taxRate > 0 ? product.price / (1 + taxRate / 100) : product.price;
       return [
         ...prev,
-        { productId: product.id, productName: product.name, price: product.price, quantity: 1, taxRate: product.taxRate ?? 0 },
+        { productId: product.id, productName: product.name, price: basePrice, quantity: 1, taxRate },
       ];
     });
   };
@@ -1557,7 +1559,7 @@ export default function PosPage() {
                   <div key={item.productId} className="flex items-center gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
-                      <p className="text-xs text-gray-500">{formatCurrency(item.price, settings)} c/u</p>
+                      <p className="text-xs text-gray-500">{formatCurrency(item.price * (1 + item.taxRate / 100), settings)} c/u</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -1577,7 +1579,7 @@ export default function PosPage() {
                       </button>
                     </div>
                     <span className="text-sm font-semibold text-gray-700 w-16 text-right">
-                      {formatCurrency(item.price * item.quantity, settings)}
+                      {formatCurrency(item.price * (1 + item.taxRate / 100) * item.quantity, settings)}
                     </span>
                   </div>
                 ))}
