@@ -32,10 +32,10 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
   );
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900">
+    <div className="w-full h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-800 border-b border-gray-700">
-        <h2 className="text-2xl font-bold text-white">{t.menu}</h2>
+      <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{t.menu}</h2>
         {cartCount > 0 && (
           <button
             onClick={() => goTo('CART')}
@@ -64,10 +64,10 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
       )}
 
       {/* Categorías */}
-      <div className="flex gap-3 px-4 py-3 overflow-x-auto bg-gray-800 border-b border-gray-700">
+      <div className="flex gap-3 px-4 py-3 overflow-x-auto bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={() => setActiveCategoryId(null)}
-          className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-base font-semibold transition-colors ${!activeCategoryId ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+          className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-base font-semibold transition-colors ${!activeCategoryId ? 'bg-brand-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
         >
           Todos
         </button>
@@ -75,7 +75,7 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
           <button
             key={c.id}
             onClick={() => setActiveCategoryId(c.id)}
-            className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-base font-semibold transition-colors ${activeCategoryId === c.id ? 'bg-brand-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+            className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-base font-semibold transition-colors ${activeCategoryId === c.id ? 'bg-brand-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
           >
             {c.name}
           </button>
@@ -91,12 +91,12 @@ export default function MenuScreen({ t, branchId }: { t: Strings; branchId: stri
               <button
                 key={p.id}
                 onClick={() => selectProduct(p.id)}
-                className="aspect-square relative overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 hover:border-brand-500 active:scale-95 transition-all text-left group"
+                className="aspect-square relative overflow-hidden rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-brand-500 active:scale-95 transition-all text-left group"
               >
                 {p.imageUrl ? (
                   <img src={p.imageUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform" />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-5xl bg-gray-800">🍽️</div>
+                  <div className="absolute inset-0 flex items-center justify-center text-5xl bg-gray-100 dark:bg-gray-800">🍽️</div>
                 )}
                 {/* Gradient overlay */}
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-8 pb-3 px-3">

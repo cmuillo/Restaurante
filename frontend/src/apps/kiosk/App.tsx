@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useKioskStore } from './store/kiosk.store';
-import { useSettingsLoader } from '../../hooks/useSettings';
+import { useSettingsLoader, useSettings } from '../../hooks/useSettings';
 import { i18n } from './i18n/strings';
 import WelcomeScreen from './screens/WelcomeScreen';
 import CustomerScreen from './screens/CustomerScreen';
@@ -35,8 +35,18 @@ function getKioskErrorMessage(error: any): string {
 
 export default function App() {
   useSettingsLoader();
+  const settings = useSettings();
   const { screen, cart, reset, touch, setConfirmedOrder, orderType } = useKioskStore();
   const t = i18n.es;
+
+  // Aplicar/quitar clase dark en <html> según el tema de configuración
+  useEffect(() => {
+    if (settings.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [settings.theme]);
 
   // Auto-reset por inactividad
   useEffect(() => {

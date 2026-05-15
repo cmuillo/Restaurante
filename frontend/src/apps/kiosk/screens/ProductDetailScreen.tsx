@@ -60,11 +60,11 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900">
+    <div className="w-full h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="flex items-center gap-4 px-6 py-4 bg-gray-800 border-b border-gray-700">
-        <button onClick={() => goTo('MENU')} className="text-gray-400 hover:text-white text-2xl">←</button>
-        <h2 className="text-2xl font-bold text-white truncate">{product.name}</h2>
+      <div className="flex items-center gap-4 px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <button onClick={() => goTo('MENU')} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-2xl">←</button>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{product.name}</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 flex gap-8">
@@ -72,15 +72,15 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
         <div className="w-72 flex-shrink-0">
           {product.imageUrl
             ? <img src={product.imageUrl} alt={product.name} className="w-full h-56 object-cover rounded-2xl mb-4" />
-            : <div className="w-full h-56 bg-gray-800 rounded-2xl mb-4 flex items-center justify-center text-7xl">🍽️</div>}
-          {product.description && <p className="text-gray-400 text-base">{product.description}</p>}
+            : <div className="w-full h-56 bg-gray-100 dark:bg-gray-800 rounded-2xl mb-4 flex items-center justify-center text-7xl">🍽️</div>}
+          {product.description && <p className="text-gray-500 dark:text-gray-400 text-base">{product.description}</p>}
         </div>
 
         {/* Opciones + modificadores */}
         <div className="flex-1 space-y-6">
           {modifiers.map((mod) => (
             <div key={mod.id}>
-              <p className="font-semibold text-white text-lg mb-3">
+              <p className="font-semibold text-gray-900 dark:text-white text-lg mb-3">
                 {mod.name} {mod.required && <span className="text-red-400 text-sm">*</span>}
               </p>
               <div className="flex flex-wrap gap-3">
@@ -91,7 +91,7 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
                     className={`px-5 py-3 rounded-2xl text-base font-medium transition-all ${
                       selectedModifiers[mod.id] === opt.id
                         ? 'bg-brand-600 text-white border-2 border-brand-400'
-                        : 'bg-gray-800 text-gray-300 border-2 border-gray-700 hover:border-gray-500'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                     }`}
                   >
                     {opt.name}
@@ -104,25 +104,25 @@ export default function ProductDetailScreen({ t, branchId }: { t: Strings; branc
 
           {/* Notas */}
           <div>
-            <p className="font-semibold text-white text-lg mb-2">Notas (opcional)</p>
+            <p className="font-semibold text-gray-900 dark:text-white text-lg mb-2">Notas (opcional)</p>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={200}
               placeholder="Sin cebolla, extra salsa…"
-              className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 text-base"
+              className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-brand-500 text-base"
             />
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-5 bg-gray-800 border-t border-gray-700 flex items-center gap-6">
-        <div className="flex items-center gap-4 bg-gray-700 rounded-2xl px-4 py-2">
-          <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="text-2xl font-bold text-white w-10 h-10 flex items-center justify-center hover:text-brand-400">−</button>
-          <span className="text-2xl font-bold text-white w-10 text-center">{quantity}</span>
-          <button onClick={() => setQuantity((q) => q + 1)} className="text-2xl font-bold text-white w-10 h-10 flex items-center justify-center hover:text-brand-400">+</button>
+      <div className="px-6 py-5 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex items-center gap-6">
+        <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-700 rounded-2xl px-4 py-2">
+          <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="text-2xl font-bold text-gray-900 dark:text-white w-10 h-10 flex items-center justify-center hover:text-brand-400">−</button>
+          <span className="text-2xl font-bold text-gray-900 dark:text-white w-10 text-center">{quantity}</span>
+          <button onClick={() => setQuantity((q) => q + 1)} className="text-2xl font-bold text-gray-900 dark:text-white w-10 h-10 flex items-center justify-center hover:text-brand-400">+</button>
         </div>
         <button
           onClick={handleAdd}

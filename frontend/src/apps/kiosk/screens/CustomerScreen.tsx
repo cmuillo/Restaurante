@@ -195,8 +195,8 @@ export default function CustomerScreen() {
   // 1. QR scanning view
   if (view === 'scanning') {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 gap-6 px-8">
-        <h2 className="text-3xl font-bold text-white">Escanea tu código QR</h2>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 gap-6 px-8">
+        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Escanea tu código QR</h2>
 
         <div className="relative w-72 h-72 rounded-2xl overflow-hidden border-4 border-brand-500 bg-black">
           <video ref={videoRef} className="w-full h-full object-cover" playsInline />
@@ -217,7 +217,7 @@ export default function CustomerScreen() {
           <p className="text-red-400 text-center text-lg max-w-xs">{qrError || 'Error al acceder a la cámara.'}</p>
         )}
         {lookupCustomer.isPending && (
-          <p className="text-gray-300 text-lg animate-pulse">Buscando cliente…</p>
+          <p className="text-gray-600 dark:text-gray-300 text-lg animate-pulse">Buscando cliente…</p>
         )}
         {qrError && !lookupCustomer.isPending && qrStatus !== 'error' && (
           <div className="flex flex-col items-center gap-3">
@@ -239,7 +239,7 @@ export default function CustomerScreen() {
 
         <button
           onClick={() => { stopCamera(); setView('main'); setQrError(''); setQrStatus('idle'); }}
-          className="text-gray-400 hover:text-white text-lg underline"
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-lg underline"
         >
           ← Volver
         </button>
@@ -250,16 +250,16 @@ export default function CustomerScreen() {
   // 2. Customer confirmation view
   if (view === 'confirm' && foundCustomer) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 gap-8 px-8">
-        <div className="flex flex-col items-center gap-4 bg-gray-800 border-2 border-brand-500 rounded-3xl p-10 w-full max-w-sm">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 gap-8 px-8">
+        <div className="flex flex-col items-center gap-4 bg-white dark:bg-gray-800 border-2 border-brand-500 rounded-3xl p-10 w-full max-w-sm">
           <span className="text-6xl">👤</span>
-          <h2 className="text-3xl font-bold text-white text-center">{foundCustomer.name}</h2>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white text-center">{foundCustomer.name}</h2>
           <div className="flex items-center gap-2 bg-brand-900 px-5 py-2 rounded-full">
             <span className="text-2xl">⭐</span>
             <span className="text-xl font-semibold text-brand-300">{foundCustomer.loyaltyPoints} puntos</span>
           </div>
         </div>
-        <p className="text-gray-300 text-xl text-center">¿Eres tú? Confirma para continuar.</p>
+        <p className="text-gray-600 dark:text-gray-300 text-xl text-center">¿Eres tú? Confirma para continuar.</p>
         <div className="flex gap-6">
           <button
             onClick={confirmCustomer}
@@ -269,7 +269,7 @@ export default function CustomerScreen() {
           </button>
           <button
             onClick={() => { setFoundCustomer(null); setView('main'); }}
-            className="px-10 py-5 bg-gray-700 hover:bg-gray-600 active:scale-95 text-white text-2xl font-bold rounded-3xl transition-all"
+            className="px-10 py-5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 active:scale-95 text-gray-900 dark:text-white text-2xl font-bold rounded-3xl transition-all"
           >
             No soy yo
           </button>
@@ -281,10 +281,10 @@ export default function CustomerScreen() {
   // 3. Quick register modal/view
   if (view === 'register') {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 px-8">
-        <div className="bg-gray-800 border border-gray-700 rounded-3xl p-10 w-full max-w-md flex flex-col gap-6">
-          <h2 className="text-3xl font-bold text-white text-center">Crear cuenta rápida</h2>
-          <p className="text-gray-300 text-center text-lg">Regístrate y acumula puntos en cada pedido.</p>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-8">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-3xl p-10 w-full max-w-md flex flex-col gap-6">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white text-center">Crear cuenta rápida</h2>
+          <p className="text-gray-600 dark:text-gray-300 text-center text-lg">Regístrate y acumula puntos en cada pedido.</p>
 
           {regDone ? (
             <div className="flex flex-col items-center gap-6">
@@ -304,7 +304,7 @@ export default function CustomerScreen() {
               </button>
               <button
                 onClick={continueAsGuest}
-                className="w-full py-4 bg-gray-700 hover:bg-gray-600 text-white text-xl font-bold rounded-2xl"
+                className="w-full py-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white text-xl font-bold rounded-2xl"
               >
                 Continuar como invitado
               </button>
@@ -312,34 +312,34 @@ export default function CustomerScreen() {
           ) : (
             <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-5">
               <div className="flex flex-col gap-1">
-                <label className="text-gray-300 font-semibold">Nombre *</label>
+                <label className="text-gray-600 dark:text-gray-300 font-semibold">Nombre *</label>
                 <input
                   type="text"
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
                   required
                   placeholder="Tu nombre"
-                  className="bg-gray-700 border border-gray-600 text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
+                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-gray-300 font-semibold">Email (para recibir tu QR)</label>
+                <label className="text-gray-600 dark:text-gray-300 font-semibold">Email (para recibir tu QR)</label>
                 <input
                   type="email"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="tu@email.com"
-                  className="bg-gray-700 border border-gray-600 text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
+                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-gray-300 font-semibold">Celular</label>
+                <label className="text-gray-600 dark:text-gray-300 font-semibold">Celular</label>
                 <input
                   type="tel"
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
                   placeholder="8888-8888"
-                  className="bg-gray-700 border border-gray-600 text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
+                  className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-brand-500"
                 />
               </div>
               {quickRegister.isError && (
@@ -360,7 +360,7 @@ export default function CustomerScreen() {
           {!regDone && (
             <button
               onClick={() => setView('main')}
-              className="text-gray-400 hover:text-white text-center underline"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-center underline"
             >
               ← Volver
             </button>
@@ -372,31 +372,31 @@ export default function CustomerScreen() {
 
   // 4. Main screen (default)
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 gap-10 px-8">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 gap-10 px-8">
       <div className="flex flex-col items-center gap-2 mb-4">
-        <h1 className="text-5xl font-bold text-white text-center">¡Bienvenido!</h1>
-        <p className="text-gray-400 text-2xl text-center">¿Cómo deseas continuar?</p>
+        <h1 className="text-5xl font-bold text-gray-900 dark:text-white text-center">¡Bienvenido!</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-2xl text-center">¿Cómo deseas continuar?</p>
       </div>
 
       <div className="flex gap-10 flex-wrap justify-center">
         {/* Sumar puntos */}
         <button
           onClick={startCamera}
-          className="flex flex-col items-center gap-4 bg-gray-800 hover:bg-brand-700 active:scale-95 border-2 border-gray-700 hover:border-brand-500 rounded-3xl p-12 transition-all w-64"
+          className="flex flex-col items-center gap-4 bg-white dark:bg-gray-800 hover:bg-brand-700 active:scale-95 border-2 border-gray-200 dark:border-gray-700 hover:border-brand-500 rounded-3xl p-12 transition-all w-64"
         >
           <span className="text-6xl">📱</span>
-          <span className="text-2xl font-bold text-white">Sumar puntos</span>
-          <span className="text-gray-400 text-center text-sm">Escanea tu código QR</span>
+          <span className="text-2xl font-bold text-gray-900 dark:text-white">Sumar puntos</span>
+          <span className="text-gray-500 dark:text-gray-400 text-center text-sm">Escanea tu código QR</span>
         </button>
 
         {/* Invitado */}
         <button
           onClick={continueAsGuest}
-          className="flex flex-col items-center gap-4 bg-gray-800 hover:bg-gray-700 active:scale-95 border-2 border-gray-700 hover:border-gray-500 rounded-3xl p-12 transition-all w-64"
+          className="flex flex-col items-center gap-4 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500 rounded-3xl p-12 transition-all w-64"
         >
           <span className="text-6xl">🛒</span>
-          <span className="text-2xl font-bold text-white">Invitado</span>
-          <span className="text-gray-400 text-center text-sm">Ordenar sin cuenta</span>
+          <span className="text-2xl font-bold text-gray-900 dark:text-white">Invitado</span>
+          <span className="text-gray-500 dark:text-gray-400 text-center text-sm">Ordenar sin cuenta</span>
         </button>
       </div>
 

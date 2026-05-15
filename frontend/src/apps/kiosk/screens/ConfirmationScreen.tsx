@@ -21,25 +21,25 @@ export default function ConfirmationScreen({ t, onReset }: { t: Strings; onReset
   }, [onReset]);
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-900 to-gray-900 gap-8">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-green-100 to-gray-50 dark:from-green-900 dark:to-gray-900 gap-8">
       <span className="text-9xl">✅</span>
-      <h1 className="text-5xl font-black text-white text-center">{t.orderPlaced}</h1>
-      <div className="bg-gray-800 rounded-3xl px-12 py-6 text-center">
-        <p className="text-gray-400 text-xl mb-2">{t.yourOrderNumber}</p>
+      <h1 className="text-5xl font-black text-gray-900 dark:text-white text-center">{t.orderPlaced}</h1>
+      <div className="bg-white dark:bg-gray-800 rounded-3xl px-12 py-6 text-center">
+        <p className="text-gray-500 dark:text-gray-400 text-xl mb-2">{t.yourOrderNumber}</p>
         <p className="text-8xl font-black text-brand-400">{confirmedOrderNumber}</p>
       </div>
-      <div className="bg-gray-800 rounded-3xl px-8 py-5 text-center max-w-2xl">
-        <p className="text-gray-400 text-lg mb-2">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl px-8 py-5 text-center max-w-2xl">
+        <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">
           {confirmedTableNumber ? t.tableAssigned : t.orderInfo}
         </p>
-        <p className="text-2xl font-bold text-white">
+        <p className="text-2xl font-bold text-gray-900 dark:text-white">
           {confirmedTableNumber ? `Mesa ${confirmedTableNumber}` : confirmedOrderMessage || 'Tu pedido fue registrado correctamente.'}
         </p>
       </div>
-      <p className="text-gray-400 text-xl">{t.waitForNumber}</p>
+      <p className="text-gray-500 dark:text-gray-400 text-xl">{t.waitForNumber}</p>
       <button
         onClick={onReset}
-        className="mt-4 px-10 py-4 bg-gray-700 hover:bg-gray-600 active:scale-95 rounded-2xl text-lg font-semibold text-white transition-all"
+        className="mt-4 px-10 py-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 active:scale-95 rounded-2xl text-lg font-semibold text-gray-900 dark:text-white transition-all"
       >
         {t.newOrder} ({secs}s)
       </button>
