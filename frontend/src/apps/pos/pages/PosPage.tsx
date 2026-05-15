@@ -308,6 +308,7 @@ export default function PosPage() {
   const [billingInitialStep, setBillingInitialStep] = useState<'payment' | 'cancelling'>('payment');
   const [billingTab, setBillingTab] = useState<'pending' | 'history'>('pending');
   const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [pendingOrderSearch, setPendingOrderSearch] = useState('');
   const [mobileSection, setMobileSection] = useState<MobileSection>('orders');
   const [customerSearchCode, setCustomerSearchCode] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -448,6 +449,16 @@ export default function PosPage() {
       inv.order?.customer?.name || '',
       inv.order?.customer?.code || '',
     ].some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const filteredPendingOrders = pendingOrders.filter((order) => {
+    const query = pendingOrderSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      order.customer?.name || '',
+      order.customer?.code || '',
+      String(order.orderNumber),
+    ].some((value) => value.toLowerCase().includes(query));
   });
 
   const freeTables = tables.filter((t) => String(t.status).toLowerCase() === 'free');
@@ -1650,8 +1661,20 @@ export default function PosPage() {
           </div>
 
           {billingTab === 'pending' && (
-            <div className="px-4 py-2 border-b border-gray-200 bg-white text-sm text-gray-600">
-              Pendientes: <span className="font-semibold text-gray-800">{pendingOrders.length}</span>
+            <div className="px-4 py-2 border-b border-gray-200 bg-white space-y-2">
+              <input
+                type="text"
+                value={pendingOrderSearch}
+                onChange={(e) => setPendingOrderSearch(e.target.value)}
+                placeholder="Buscar por cliente o # orden..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <p className="text-sm text-gray-600">
+                Pendientes: <span className="font-semibold text-gray-800">{filteredPendingOrders.length}</span>
+                {pendingOrderSearch && filteredPendingOrders.length !== pendingOrders.length && (
+                  <span className="text-gray-400"> de {pendingOrders.length}</span>
+                )}
+              </p>
             </div>
           )}
 
@@ -1680,7 +1703,7 @@ export default function PosPage() {
                   </div>
                 )}
 
-                {pendingOrders.map((order) => {
+                {filteredPendingOrders.map((order) => {
               const isKioskOrigin = order.type === 'kiosk' || (!order.table?.number && !order.userId);
               const sourceLabel =
                 isKioskOrigin
@@ -1699,6 +1722,11 @@ export default function PosPage() {
                     <div>
                       <p className="font-semibold text-gray-800">Orden #{order.orderNumber}</p>
                       <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
+                      {(order.customer?.name || order.customer?.code) && (
+                        <p className="text-xs font-medium text-brand-600 mt-0.5">
+                          👤 {order.customer.name || order.customer.code}
+                        </p>
+                      )}
                     </div>
                     <span
                       className={`text-[11px] px-2 py-1 rounded-full font-semibold ${

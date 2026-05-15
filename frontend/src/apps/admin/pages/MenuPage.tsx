@@ -25,6 +25,7 @@ type Product = {
   taxCode?: string;
   taxRate?: number;
   unitOfMeasure?: string;
+  isBar?: boolean;
 };
 
 type CabysCatalogItem = {
@@ -149,6 +150,7 @@ export default function MenuPage() {
     pointsPerPurchase: '',
     isActive: true,
     showInKiosk: true,
+    isBar: false,
     cabysCode: '',
     commercialCodeType: '04',
     commercialCode: '',
@@ -273,6 +275,7 @@ export default function MenuPage() {
       pointsPerPurchase: '',
       isActive: true,
       showInKiosk: true,
+      isBar: false,
       cabysCode: '',
       commercialCodeType: '04',
       commercialCode: '',
@@ -303,6 +306,7 @@ export default function MenuPage() {
       pointsPerPurchase: p.pointsPerPurchase === undefined ? '' : String(p.pointsPerPurchase),
       isActive: p.isActive,
       showInKiosk: p.showInKiosk ?? true,
+      isBar: p.isBar ?? false,
       cabysCode: p.cabysCode ?? '',
       commercialCodeType: p.commercialCodeType ?? '04',
       commercialCode: p.commercialCode ?? '',
@@ -387,6 +391,7 @@ export default function MenuPage() {
       pointsPerPurchase: prodForm.pointsPerPurchase === '' ? 0 : Number(prodForm.pointsPerPurchase),
       isActive: prodForm.isActive,
       showInKiosk: prodForm.showInKiosk,
+      isBar: prodForm.isBar,
       cabysCode: prodForm.cabysCode || undefined,
       commercialCodeType: prodForm.commercialCodeType || undefined,
       commercialCode: prodForm.commercialCode || undefined,
@@ -823,6 +828,10 @@ export default function MenuPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={prodForm.showInKiosk} onChange={(e) => setProdForm({ ...prodForm, showInKiosk: e.target.checked })} className="w-4 h-4 rounded accent-brand-500" />
                 <span className="text-sm text-gray-300">Mostrar en kiosko</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={prodForm.isBar} onChange={(e) => setProdForm({ ...prodForm, isBar: e.target.checked })} className="w-4 h-4 rounded accent-brand-500" />
+                <span className="text-sm text-gray-300">Barra</span>
               </label>
             </div>
 

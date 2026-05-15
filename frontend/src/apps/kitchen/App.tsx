@@ -9,6 +9,7 @@ interface OrderItem {
   productName: string;
   quantity: number;
   notes?: string;
+  isBar?: boolean;
   modifiers: { optionName: string }[];
 }
 
@@ -287,12 +288,15 @@ function OrderCard({
         {order.items.map((item) => (
           <li key={item.id} className="text-sm">
             <span className="font-semibold text-white">{item.quantity}x {item.productName}</span>
+            {item.isBar && (
+              <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 align-middle">BARRA</span>
+            )}
             {item.modifiers?.length > 0 && (
               <div className="text-xs text-slate-400 ml-4 mt-1">
                 {item.modifiers.map((m, i) => <span key={i}>+ {m.optionName}{i < item.modifiers.length - 1 ? ', ' : ''}</span>)}
               </div>
             )}
-            {item.notes && <div className="text-xs text-amber-300 ml-4 mt-1">Nota: {item.notes}</div>}
+            {item.notes && item.notes !== order.notes && <div className="text-xs text-amber-300 ml-4 mt-1">Nota: {item.notes}</div>}
           </li>
         ))}
       </ul>
@@ -367,6 +371,7 @@ export default function App() {
   const [selectedBranchId, setSelectedBranchId] = useState(initialQueryBranchId);
   const branchId = isSuperAdmin ? (selectedBranchId || user?.branchId || '') : (user?.branchId ?? '');
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [kitchenFilter, setKitchenFilter] = useState<'all' | 'bar'>('all');
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ['kitchen-branches'],
@@ -432,8 +437,9 @@ export default function App() {
   const activeOrders = useMemo(
     () => [...orders]
       .filter((order) => !order.readyAt)
+      .filter((order) => kitchenFilter === 'all' || order.items.some((i) => i.isBar))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [orders],
+    [orders, kitchenFilter],
   );
 
   const readyOrders = useMemo(
@@ -555,7 +561,24 @@ export default function App() {
         <section className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-100">Órdenes en cocina</h2>
-            <span className="text-xs text-slate-400">Botón 1: Preparación. Botón 2: Listo.</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setKitchenFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  kitchenFilter === 'all' ? 'bg-sky-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setKitchenFilter('bar')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  kitchenFilter === 'bar' ? 'bg-violet-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                🍹 Barra
+              </button>
+            </div>
           </div>
 
           {activeOrders.length === 0 ? (

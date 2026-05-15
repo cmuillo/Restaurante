@@ -58,6 +58,9 @@ export class OrderItem {
   @Column({ nullable: true, length: 5 })
   unitOfMeasure: string;
 
+  @Column({ default: false })
+  isBar: boolean; // snapshot: ítem de barra (no cocina)
+
   @OneToMany(() => OrderItemModifier, (mod) => mod.orderItem, { cascade: true })
   modifiers: OrderItemModifier[];
 }

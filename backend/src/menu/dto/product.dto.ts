@@ -106,6 +106,11 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   pointsPerPurchase?: number;
+
+  @ApiProperty({ required: false, description: 'El ítem se sirve en barra, no en cocina' })
+  @IsOptional()
+  @IsBoolean()
+  isBar?: boolean;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

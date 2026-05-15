@@ -66,6 +66,9 @@ export class Product {
   @Column({ default: 0 })
   pointsPerPurchase: number; // puntos a ganar por cada unidad comprada
 
+  @Column({ default: false })
+  isBar: boolean; // el ítem se prepara/sirve en barra (mesero), no en cocina
+
   @CreateDateColumn()
   createdAt: Date;
 

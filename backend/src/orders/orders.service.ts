@@ -115,6 +115,7 @@ export class OrdersService {
           taxCode: product.taxCode,
           taxRate: lineTaxRate,
           unitOfMeasure: product.unitOfMeasure,
+          isBar: product.isBar ?? false,
           modifiers: modifiers as OrderItemModifier[],
         };
       });
