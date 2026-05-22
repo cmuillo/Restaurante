@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BillingService } from './billing.service';
-import { CreateInvoiceDto, CreateCreditNoteDto, SendInvoiceEmailDto } from './dto/billing.dto';
+import { CreateInvoiceDto, CreateCreditNoteDto, SendInvoiceEmailDto, CreateTableInvoiceDto } from './dto/billing.dto';
 import { HaciendaService } from '../hacienda/hacienda.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -25,6 +25,13 @@ export class BillingController {
   @ApiOperation({ summary: 'Crear factura / cobrar orden' })
   createInvoice(@Body() dto: CreateInvoiceDto, @CurrentUser() user: any) {
     return this.billingService.createInvoice(dto, user.id);
+  }
+
+  @Post('invoices/table')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Crear factura consolidada para una mesa (agrupa todas sus órdenes)' })
+  createTableInvoice(@Body() dto: CreateTableInvoiceDto, @CurrentUser() user: any) {
+    return this.billingService.createTableInvoice(dto, user.id);
   }
 
   @Get('invoices')

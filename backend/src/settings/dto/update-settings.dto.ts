@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsNumber, IsArray, MaxLength, IsHexColor,
-  IsIn, Min, Max, IsEmail, IsUrl,
+  IsIn, Min, Max, IsEmail, IsUrl, IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -64,8 +64,11 @@ export class UpdateSettingsDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) @Type(() => Number)
   defaultTaxRate?: number;
 
-  @IsOptional() @IsArray() @IsNumber({}, { each: true })
-  tipSuggestions?: number[];
+  @IsOptional() @IsBoolean()
+  tipsEnabled?: boolean;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(50) @Type(() => Number)
+  tipPercentage?: number;
 
   @IsOptional() @IsString() @MaxLength(500)
   invoiceFooterMessage?: string;
@@ -81,6 +84,12 @@ export class UpdateSettingsDto {
 
   @IsOptional() @IsString() @MaxLength(200)
   kioskWelcomeSubtitle?: string;
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  kioskCarouselImages?: string[];
+
+  @IsOptional() @IsNumber() @Min(1) @Max(60)
+  kioskCarouselInterval?: number;
 
   @IsOptional() @IsString() @IsIn(TIMEZONES)
   timezone?: string;

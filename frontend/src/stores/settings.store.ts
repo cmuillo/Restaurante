@@ -18,12 +18,15 @@ export interface GlobalSettings {
   loginBackgroundColor: string;
   loginBackgroundColorDark: string;
   defaultTaxRate: number;
-  tipSuggestions: number[];
+  tipsEnabled: boolean;
+  tipPercentage: number;
   invoiceFooterMessage: string | null;
   kioskWelcomeColor: string;
   kioskWelcomeColorDark: string;
   kioskWelcomeMessage: string;
   kioskWelcomeSubtitle: string;
+  kioskCarouselImages: string[];
+  kioskCarouselInterval: number;
   timezone: string;
   dateFormat: string;
   updatedAt: string;
@@ -47,13 +50,14 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   loginBackgroundColor: '#EA580C',
   loginBackgroundColorDark: '#C2410C',
   defaultTaxRate: 13,
-  tipSuggestions: [10, 15, 18],
+  tipsEnabled: false,
+  tipPercentage: 10,
   invoiceFooterMessage: null,
   kioskWelcomeColor: '#EA580C',
   kioskWelcomeColorDark: '#C2410C',
   kioskWelcomeMessage: '¡Bienvenido!',
-  kioskWelcomeSubtitle: 'Toca la pantalla para comenzar tu pedido',
-  timezone: 'America/Costa_Rica',
+  kioskWelcomeSubtitle: 'Toca la pantalla para comenzar tu pedido',  kioskCarouselImages: [],
+  kioskCarouselInterval: 5,  timezone: 'America/Costa_Rica',
   dateFormat: 'DD/MM/YYYY',
   updatedAt: '',
 };

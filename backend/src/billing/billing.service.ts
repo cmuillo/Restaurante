@@ -4,10 +4,10 @@ import { DataSource, In, Repository } from 'typeorm';
 import PDFDocument = require('pdfkit');
 import * as nodemailer from 'nodemailer';
 import { Invoice, InvoiceStatus, PaymentMethod } from './entities/invoice.entity';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { Order, OrderStatus, OrderType } from '../orders/entities/order.entity';
 import { BranchConfig } from '../branches/entities/branch-config.entity';
 import { AuditService } from '../audit/audit.service';
-import { CreateInvoiceDto } from './dto/billing.dto';
+import { CreateInvoiceDto, CreateTableInvoiceDto } from './dto/billing.dto';
 import { HaciendaService } from '../hacienda/hacienda.service';
 import { CustomersService } from '../customers/customers.service';
 import { Customer } from '../customers/entities/customer.entity';
@@ -85,9 +85,10 @@ export class BillingService {
         });
       }
 
-      let orderTotal = Number(order.total || 0);
+      // tipAmount es seguimiento interno — el cliente siempre paga subtotal + taxAmount
       let orderTaxAmount = Number(order.taxAmount || 0);
       let orderSubtotal = Number(order.subtotal || 0);
+      let orderTotal = orderSubtotal + orderTaxAmount - Number(order.discountAmount || 0);
       let pointsDiscount = 0;
       let pointsUsed = 0;
       let isCustomerExempt = false;
@@ -227,8 +228,8 @@ export class BillingService {
         });
 
         if (activeOrdersOnTable === 0) {
-          await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.FREE });
-          this.gateway.emitTableUpdated(order.branchId, { id: order.tableId, status: TableStatus.FREE });
+          await manager.update(Table, { id: order.tableId, branchId: order.branchId }, { status: TableStatus.PAID });
+          this.gateway.emitTableUpdated(order.branchId, { id: order.tableId, status: TableStatus.PAID });
         }
       }
 
@@ -324,6 +325,152 @@ export class BillingService {
     });
   }
 
+  /** Crear factura consolidada para una mesa (agrupa todas sus órdenes activas en una sola factura). */
+  async createTableInvoice(dto: CreateTableInvoiceDto, userId?: string): Promise<any> {
+    return this.dataSource.transaction(async (manager) => {
+      const activeStatuses = [
+        OrderStatus.PENDING,
+        OrderStatus.IN_PREPARATION,
+        OrderStatus.READY,
+        OrderStatus.DELIVERED,
+      ];
+
+      const orders = await manager.find(Order, {
+        where: {
+          branchId: dto.branchId,
+          tableId: dto.tableId,
+          type: OrderType.DINE_IN,
+          status: In(activeStatuses),
+        },
+        relations: ['branch', 'items', 'items.modifiers', 'table', 'customer'],
+        order: { createdAt: 'ASC' },
+      });
+
+      if (!orders.length) {
+        throw new NotFoundException('No hay órdenes activas en esta mesa');
+      }
+
+      const branchId = dto.branchId;
+      const config = await manager.findOne(BranchConfig, { where: { branchId } });
+
+      const currencyCode = String(dto.currencyCode ?? 'CRC').toUpperCase();
+      let exchangeRate = 1;
+      if (currencyCode !== 'CRC') {
+        try {
+          if (currencyCode === 'USD') exchangeRate = await this.exchangeRateService.getUsdRate();
+          else if (currencyCode === 'EUR') exchangeRate = await this.exchangeRateService.getEurRate();
+          else throw new BadRequestException(`Moneda ${currencyCode} no soportada`);
+        } catch {
+          exchangeRate = Number(dto.exchangeRate ?? 0);
+        }
+        if (exchangeRate <= 0) throw new BadRequestException(`No se pudo obtener tipo de cambio para ${currencyCode}`);
+      }
+
+      // Agregar totales de todas las órdenes
+      let totalSubtotal = 0;
+      let totalTax = 0;
+      let totalTip = 0;
+      let totalDiscount = 0;
+      for (const o of orders) {
+        totalSubtotal += Number(o.subtotal || 0);
+        totalTax += Number(o.taxAmount || 0);
+        totalTip += Number(o.tipAmount || 0);
+        totalDiscount += Number(o.discountAmount || 0);
+      }
+      // tipAmount es seguimiento interno — no se suma al total que paga el cliente
+      let grandTotal = totalSubtotal + totalTax - totalDiscount;
+
+      // Exoneración de IVA (si aplica en la primera orden con cliente)
+      const firstOrderWithCustomer = orders.find((o) => o.customerId);
+      if (firstOrderWithCustomer?.customerId) {
+        const exemptCustomer = await manager.findOne(Customer, { where: { id: firstOrderWithCustomer.customerId } });
+        if (exemptCustomer?.isExempt) {
+          grandTotal = Math.max(0, grandTotal - totalTax);
+          totalTax = 0;
+        }
+      }
+
+      // Pago en efectivo
+      let cashReceived = 0;
+      let change = 0;
+      const normalizedPaymentDetails: Record<string, number> = {};
+
+      if (dto.paymentMethod === PaymentMethod.MIXED) {
+        const mixedCash = Number(dto.paymentDetails?.cash ?? 0);
+        const mixedCard = Number(dto.paymentDetails?.card ?? 0);
+        if (mixedCash <= 0 || mixedCard <= 0) throw new BadRequestException('Para pago mixto indica montos de efectivo y tarjeta');
+        if (Math.abs(mixedCash + mixedCard - grandTotal) > 0.01) throw new BadRequestException('La suma de efectivo y tarjeta debe ser igual al total');
+        normalizedPaymentDetails.cash = mixedCash;
+        normalizedPaymentDetails.card = mixedCard;
+        cashReceived = Number(dto.cashReceived ?? mixedCash);
+        change = Math.max(0, cashReceived - mixedCash);
+      } else if (dto.paymentMethod === PaymentMethod.CASH) {
+        cashReceived = Number(dto.cashReceived ?? grandTotal);
+        if (cashReceived < grandTotal) throw new BadRequestException('El efectivo recibido no cubre el total');
+        change = Math.max(0, cashReceived - grandTotal);
+      } else {
+        normalizedPaymentDetails[dto.paymentMethod] = grandTotal;
+      }
+
+      // Número de factura secuencial
+      const invoiceNumber = `${config?.invoicePrefix || 'F-'}${String(config?.invoiceNextNumber ?? 1).padStart(6, '0')}`;
+      if (config) {
+        await manager.update(BranchConfig, { branchId }, { invoiceNextNumber: (config.invoiceNextNumber ?? 0) + 1 });
+      }
+
+      const primaryOrder = orders[0];
+      const orderIds = orders.map((o) => o.id);
+
+      const invoice = manager.create(Invoice, {
+        orderId: primaryOrder.id,
+        tableId: dto.tableId,
+        orderIds,
+        invoiceNumber,
+        paymentMethod: dto.paymentMethod,
+        paymentDetails: Object.keys(normalizedPaymentDetails).length > 0 ? normalizedPaymentDetails : undefined,
+        currencyCode,
+        exchangeRate,
+        customerName: dto.customerName || firstOrderWithCustomer?.customer?.name || 'Consumidor final',
+        customerTaxId: dto.customerTaxId || firstOrderWithCustomer?.customer?.taxId || undefined,
+        customerAddress: dto.customerAddress || firstOrderWithCustomer?.customer?.address || undefined,
+        subtotal: totalSubtotal,
+        taxAmount: totalTax,
+        tipAmount: totalTip,
+        discountAmount: totalDiscount,
+        total: grandTotal,
+        cashReceived,
+        change,
+        haciendaDocType: 'FE',
+      });
+
+      const saved = await manager.save(Invoice, invoice);
+
+      // Cerrar todas las órdenes
+      await manager.update(Order, { id: In(orderIds) }, { status: OrderStatus.COMPLETED, completedAt: new Date() });
+
+      // Cambiar mesa a PAID
+      await manager.update(Table, { id: dto.tableId, branchId }, { status: TableStatus.PAID });
+      this.gateway.emitTableUpdated(branchId, { id: dto.tableId, status: TableStatus.PAID });
+
+      await this.auditService.log({
+        branchId,
+        userId,
+        action: 'invoice.create_table',
+        entity: 'Invoice',
+        entityId: saved.id,
+        newValue: { invoiceNumber, total: grandTotal, tableId: dto.tableId, orders: orderIds.length },
+      });
+
+      setImmediate(() => {
+        this.haciendaService.sendInvoice(saved.id).catch((e) =>
+          this.logger.error(`Error enviando factura ${saved.id} a Hacienda: ${e.message}`),
+        );
+      });
+
+      return { ...saved, orderCount: orders.length };
+    });
+  }
+
   async cancelInvoice(id: string, reason: string, userId?: string): Promise<Invoice> {
     const invoice = await this.invoiceRepository.findOne({
       where: { id, status: InvoiceStatus.ISSUED },
@@ -389,7 +536,7 @@ export class BillingService {
     return this.invoiceRepository.findOneOrFail({ where: { id } });
   }
 
-  findAll(branchId: string, from?: Date, to?: Date): Promise<Invoice[]> {
+  async findAll(branchId: string, from?: Date, to?: Date): Promise<Invoice[]> {
     const query = this.invoiceRepository
       .createQueryBuilder('inv')
       .leftJoinAndSelect('inv.order', 'order')
@@ -415,7 +562,39 @@ export class BillingService {
       query.andWhere('inv.createdAt < :to', { to: toDate });
     }
 
-    return query.getMany();
+    const invoices = await query.getMany();
+
+    // Para facturas combinadas de mesa (orderIds con >1 orden), cargar ítems de todas las órdenes
+    const multiOrderInvoices = invoices.filter(
+      (inv) => inv.orderIds && inv.orderIds.length > 1,
+    );
+    if (multiOrderInvoices.length > 0) {
+      const extraOrderIds = [
+        ...new Set(
+          multiOrderInvoices.flatMap((inv) =>
+            (inv.orderIds ?? []).filter((id) => id !== inv.orderId),
+          ),
+        ),
+      ];
+      if (extraOrderIds.length > 0) {
+        const extraOrders = await this.orderRepository.find({
+          where: { id: In(extraOrderIds) },
+          relations: ['items'],
+        });
+        const extraOrdersById = new Map(extraOrders.map((o) => [o.id, o]));
+        for (const inv of multiOrderInvoices) {
+          const otherOrderIds = (inv.orderIds ?? []).filter((id) => id !== inv.orderId);
+          const otherItems = otherOrderIds.flatMap(
+            (id) => extraOrdersById.get(id)?.items ?? [],
+          );
+          if (inv.order && otherItems.length > 0) {
+            inv.order.items = [...(inv.order.items ?? []), ...otherItems];
+          }
+        }
+      }
+    }
+
+    return invoices;
   }
 
   async sendInvoiceByEmail(invoiceId: string, toEmail: string): Promise<{ success: boolean; message: string }> {

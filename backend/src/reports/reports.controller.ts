@@ -114,4 +114,15 @@ export class ReportsController {
   ) {
     return this.reportsService.cashMovements(branchId, new Date(from), new Date(to));
   }
+
+  @Get('tips-by-waiter')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.BRANCH_ADMIN, UserRole.ACCOUNTANT)
+  @ApiOperation({ summary: 'Cargo de servicio por mesero en el periodo' })
+  tipsByWaiter(
+    @Query('branchId', ParseUUIDPipe) branchId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.reportsService.tipsByWaiter(branchId, new Date(from), new Date(to));
+  }
 }

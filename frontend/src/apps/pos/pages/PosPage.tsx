@@ -35,7 +35,8 @@ interface PendingOrder {
   discountAmount: number;
   total: number;
   createdAt: string;
-  table?: { number: number };
+  tableId?: string | null;
+  table?: { id: string; number: number };
   customer?: {
     id: string;
     name: string;
@@ -261,8 +262,8 @@ function printHistoryInvoice(invoice: InvoiceHistoryItem) {
 
   <div class="totals">
     <div class="row"><span>Subtotal</span><strong>${fmtMoney(toAmount(invoice.subtotal))}</strong></div>
+    ${toAmount(invoice.tipAmount) > 0 ? `<div class="row"><span>Cargo de servicio</span><strong>${fmtMoney(toAmount(invoice.tipAmount))}</strong></div>` : ''}
     <div class="row"><span>Impuestos</span><strong>${fmtMoney(toAmount(invoice.taxAmount))}</strong></div>
-    <div class="row"><span>Propina</span><strong>${fmtMoney(toAmount(invoice.tipAmount))}</strong></div>
     <div class="row"><span>Descuento</span><strong>-${fmtMoney(toAmount(invoice.discountAmount))}</strong></div>
     <div class="row"><span>Puntos usados</span><strong>${toAmount(order?.pointsUsed).toFixed(0)} pts</strong></div>
     <div class="row"><span>Monto con puntos</span><strong>-${fmtMoney(toAmount(order?.pointsDiscount))}</strong></div>
@@ -306,6 +307,9 @@ export default function PosPage() {
   const [showBilling, setShowBilling] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
   const [billingInitialStep, setBillingInitialStep] = useState<'payment' | 'cancelling'>('payment');
+  const [tableBillingTableId, setTableBillingTableId] = useState<string | undefined>(undefined);
+  const [tableBillingTableNumber, setTableBillingTableNumber] = useState<number | undefined>(undefined);
+  const [tableBillingOrderNumbers, setTableBillingOrderNumbers] = useState<number[] | undefined>(undefined);
   const [billingTab, setBillingTab] = useState<'pending' | 'history'>('pending');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [pendingOrderSearch, setPendingOrderSearch] = useState('');
@@ -461,7 +465,23 @@ export default function PosPage() {
     ].some((value) => value.toLowerCase().includes(query));
   });
 
-  const freeTables = tables.filter((t) => String(t.status).toLowerCase() === 'free');
+  // Group dine_in table orders; non-table orders shown individually
+  const dineInTableGroups: { tableId: string; tableNumber: number; orders: PendingOrder[]; total: number }[] = [];
+  const nonTableOrders: PendingOrder[] = [];
+  {
+    const tableMap: Record<string, { tableId: string; tableNumber: number; orders: PendingOrder[]; total: number }> = {};
+    for (const order of filteredPendingOrders) {
+      if (order.type === 'dine_in' && order.table?.id) {
+        const tid = order.table.id;
+        if (!tableMap[tid]) tableMap[tid] = { tableId: tid, tableNumber: order.table.number, orders: [], total: 0 };
+        tableMap[tid].orders.push(order);
+        tableMap[tid].total += Number(order.total || 0);
+      } else {
+        nonTableOrders.push(order);
+      }
+    }
+    dineInTableGroups.push(...Object.values(tableMap));
+  }
 
   const searchCustomer = useMutation({
     mutationFn: async (code: string) => {
@@ -653,6 +673,30 @@ export default function PosPage() {
     setShowBilling(true);
   };
 
+  const openTableBilling = (group: { tableId: string; tableNumber: number; orders: PendingOrder[]; total: number }) => {
+    const combinedOrder: PendingOrder = {
+      id: group.tableId,
+      orderNumber: group.orders[0]?.orderNumber ?? 0,
+      type: 'dine_in',
+      status: group.orders.some((o) =>
+        ['in_preparation', 'ready', 'delivered'].includes(o.status)
+      ) ? 'in_preparation' : 'pending',
+      subtotal: group.orders.reduce((s, o) => s + Number(o.subtotal || 0), 0),
+      taxAmount: group.orders.reduce((s, o) => s + Number(o.taxAmount || 0), 0),
+      tipAmount: group.orders.reduce((s, o) => s + Number(o.tipAmount || 0), 0),
+      discountAmount: group.orders.reduce((s, o) => s + Number(o.discountAmount || 0), 0),
+      total: group.total,
+      createdAt: group.orders[0]?.createdAt ?? new Date().toISOString(),
+      items: group.orders.flatMap((o) => o.items),
+    };
+    setTableBillingTableId(group.tableId);
+    setTableBillingTableNumber(group.tableNumber);
+    setTableBillingOrderNumbers(group.orders.map((o) => o.orderNumber));
+    setBillingInitialStep('payment');
+    setSelectedOrder(combinedOrder);
+    setShowBilling(true);
+  };
+
   const openShift = useMutation({
     mutationFn: (openingCash: number) =>
       api.post(`/pos/shift/open?branchId=${branchId}`, { openingCash }, { headers: { 'X-Silent-Error': '1' } }).then((r) => r.data),
@@ -753,15 +797,24 @@ export default function PosPage() {
         order={selectedOrder}
         customer={selectedOrder?.customer || selectedCustomer}
         initialStep={billingInitialStep}
+        tableId={tableBillingTableId}
+        tableNumber={tableBillingTableNumber}
+        tableOrderNumbers={tableBillingOrderNumbers}
         onClose={() => {
           setShowBilling(false);
           setSelectedOrder(null);
+          setTableBillingTableId(undefined);
+          setTableBillingTableNumber(undefined);
+          setTableBillingOrderNumbers(undefined);
           qc.invalidateQueries({ queryKey: ['pos-pending-billing'] });
           qc.invalidateQueries({ queryKey: ['pos-tables'] });
         }}
         onCancelled={() => {
           setShowBilling(false);
           setSelectedOrder(null);
+          setTableBillingTableId(undefined);
+          setTableBillingTableNumber(undefined);
+          setTableBillingOrderNumbers(undefined);
           qc.invalidateQueries({ queryKey: ['pos-pending-billing'] });
           qc.invalidateQueries({ queryKey: ['pos-tables'] });
         }}
@@ -1113,6 +1166,7 @@ export default function PosPage() {
                     occupied: 'bg-red-100 text-red-700 border-red-200',
                     waiting_food: 'bg-amber-100 text-amber-700 border-amber-200',
                     bill_requested: 'bg-orange-100 text-orange-700 border-orange-200',
+                    paid: 'bg-purple-100 text-purple-700 border-purple-200',
                     reserved: 'bg-blue-100 text-blue-700 border-blue-200',
                   };
 
@@ -1121,6 +1175,7 @@ export default function PosPage() {
                     occupied: 'bg-red-900 text-red-200 border-red-700',
                     waiting_food: 'bg-amber-900 text-amber-200 border-amber-700',
                     bill_requested: 'bg-orange-900 text-orange-200 border-orange-700',
+                    paid: 'bg-purple-900 text-purple-200 border-purple-700',
                     reserved: 'bg-blue-900 text-blue-200 border-blue-700',
                   };
 
@@ -1131,6 +1186,7 @@ export default function PosPage() {
                     occupied: 'Ocupada',
                     waiting_food: 'Esperando comida',
                     bill_requested: 'Pide la cuenta',
+                    paid: 'Pagada',
                     reserved: 'Reservada',
                   };
 
@@ -1139,6 +1195,7 @@ export default function PosPage() {
                     occupied: '👥',
                     waiting_food: '⏱️',
                     bill_requested: '💳',
+                    paid: '✅',
                     reserved: '📌',
                   };
 
@@ -1169,25 +1226,31 @@ export default function PosPage() {
                       </div>
                       <button
                         onClick={() => {
-                          if (status === 'free' || status === 'reserved') {
-                            setTableId(t.id);
-                            setTablesModalOpen(false);
-                          }
+                          setTableId(t.id);
+                          setTablesModalOpen(false);
                         }}
-                        disabled={status !== 'free' && status !== 'reserved'}
+                        disabled={status === 'reserved'}
                         className={`w-full text-xs py-1.5 rounded-lg font-semibold transition-colors ${
                           isSelected
                             ? 'bg-brand-600 text-white'
-                            : status === 'free' || status === 'reserved'
+                            : status === 'free'
                               ? settings.theme === 'dark'
                                 ? 'bg-brand-900 text-brand-200 hover:bg-brand-800'
                                 : 'bg-brand-100 text-brand-700 hover:bg-brand-200'
-                              : settings.theme === 'dark'
-                                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : status === 'reserved'
+                                ? settings.theme === 'dark'
+                                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : settings.theme === 'dark'
+                                  ? 'bg-amber-900 text-amber-200 hover:bg-amber-800'
+                                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                         }`}
                       >
-                        {isSelected ? '✓ Seleccionada' : 'Seleccionar'}
+                        {isSelected
+                          ? '✓ Seleccionada'
+                          : status === 'free' || status === 'reserved'
+                            ? 'Seleccionar'
+                            : '➕ Agregar orden'}
                       </button>
                     </div>
                   );
@@ -1247,6 +1310,18 @@ export default function PosPage() {
                             }`}
                           >
                             Mesa {t.number}: Cancelar reserva
+                          </button>
+                        )}
+                        {status === 'paid' && (
+                          <button
+                            onClick={() => updateTableStatus.mutate({ id: t.id, status: 'free' })}
+                            className={`w-full text-xs py-1 border rounded-lg transition-colors font-semibold ${
+                              settings.theme === 'dark'
+                                ? 'border-purple-700 text-purple-300 hover:bg-purple-900'
+                                : 'border-purple-300 text-purple-600 hover:bg-purple-50'
+                            }`}
+                          >
+                            Mesa {t.number}: Liberar
                           </button>
                         )}
                       </div>
@@ -1520,28 +1595,25 @@ export default function PosPage() {
                   <>
                     <div className="mt-4 pt-4 border-t border-gray-200">
                       <label className="block text-xs font-medium text-gray-600 mb-2">Seleccionar mesa</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={tableId}
-                          onChange={(e) => setTableId(e.target.value)}
-                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        >
-                          <option value="">Seleccionar mesa...</option>
-                          {freeTables.map((t) => (
-                            <option key={t.id} value={t.id}>Mesa {t.number}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => setTablesModalOpen(true)}
-                          className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-semibold transition-colors flex-shrink-0"
-                          title="Ver estado de todas las mesas"
-                        >
-                          🪑 Ver mesas
-                        </button>
-                      </div>
-                      {freeTables.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-2">No hay mesas libres en este momento.</p>
-                      )}
+                      <button
+                        onClick={() => setTablesModalOpen(true)}
+                        className="w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-lg text-sm font-semibold transition-colors flex items-center justify-between"
+                      >
+                        <span>
+                          🪑 {tableId ? `Mesa ${tables.find((t) => t.id === tableId)?.number ?? ''}` : 'Seleccionar mesa...'}
+                        </span>
+                        <span className="text-blue-400 text-xs">▼</span>
+                      </button>
+                      {(() => {
+                        const selTable = tables.find((t) => t.id === tableId);
+                        const selStatus = selTable ? String(selTable.status).toLowerCase() : '';
+                        if (tableId && selStatus !== 'free' && selStatus !== 'reserved') {
+                          return (
+                            <p className="text-xs text-amber-600 mt-1.5">⚠️ Mesa con orden activa — se registrará una orden adicional</p>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </>
                 )}
@@ -1703,70 +1775,103 @@ export default function PosPage() {
                   </div>
                 )}
 
-                {filteredPendingOrders.map((order) => {
-              const isKioskOrigin = order.type === 'kiosk' || (!order.table?.number && !order.userId);
-              const sourceLabel =
-                isKioskOrigin
-                  ? 'Kiosko'
-                  : order.type === 'takeout'
-                    ? 'Para llevar'
-                    : order.type === 'delivery'
-                      ? 'Delivery'
-                  : order.table?.number
-                    ? `Mesa ${order.table.number}`
-                    : 'Sin mesa';
-
-              return (
-                <div key={order.id} className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-gray-800">Orden #{order.orderNumber}</p>
-                      <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
-                      {(order.customer?.name || order.customer?.code) && (
-                        <p className="text-xs font-medium text-brand-600 mt-0.5">
-                          👤 {order.customer.name || order.customer.code}
-                        </p>
-                      )}
+                {/* Table groups — one card per dine_in table */}
+                {dineInTableGroups.map((group) => (
+                  <div key={group.tableId} className="bg-white border-2 border-brand-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-gray-800">Mesa {group.tableNumber}</p>
+                      <span className="text-[11px] px-2 py-1 rounded-full font-semibold bg-brand-100 text-brand-700">
+                        {group.orders.length} orden{group.orders.length !== 1 ? 'es' : ''}
+                      </span>
                     </div>
-                    <span
-                      className={`text-[11px] px-2 py-1 rounded-full font-semibold ${
-                        isKioskOrigin ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
-                      {sourceLabel}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-gray-600 space-y-1 max-h-20 overflow-y-auto">
-                    {order.items.slice(0, 4).map((item) => (
-                      <p key={item.id}>{item.quantity}x {item.productName}</p>
-                    ))}
-                    {order.items.length > 4 && (
-                      <p className="text-gray-400">+{order.items.length - 4} item(s) mas...</p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
-                    <span className="text-sm text-gray-500">Total</span>
-                    <span className="font-bold text-brand-600">{formatCurrency(Number(order.total || 0), settings)}</span>
-                  </div>
-
-                  <div className="flex gap-2">
+                    <div className="text-xs text-gray-600 space-y-1">
+                      {group.orders.map((o) => (
+                        <div key={o.id} className="flex justify-between">
+                          <span className="text-gray-500">#{o.orderNumber}</span>
+                          <span>{formatCurrency(Number(o.total || 0), settings)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                      <span className="text-sm font-semibold text-gray-700">Total mesa</span>
+                      <span className="font-bold text-brand-600">{formatCurrency(group.total, settings)}</span>
+                    </div>
                     <button
-                      onClick={() => openCancelForOrder(order)}
-                      className="flex-none py-2 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-semibold transition-colors"
+                      onClick={() => openTableBilling(group)}
+                      className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold"
                     >
-                      🚫 Cancelar
-                    </button>
-                    <button
-                      onClick={() => openBillingForOrder(order)}
-                      className="flex-1 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold"
-                    >
-                      Facturar orden
+                      Facturar Mesa {group.tableNumber}
                     </button>
                   </div>
-                </div>
-              );
+                ))}
+
+                {/* Individual non-table orders (kiosk, takeout, delivery) */}
+                {nonTableOrders.map((order) => {
+                  const isKioskOrigin = order.type === 'kiosk' || (!order.table?.number && !order.userId);
+                  const sourceLabel =
+                    isKioskOrigin
+                      ? 'Kiosko'
+                      : order.type === 'takeout'
+                        ? 'Para llevar'
+                        : order.type === 'delivery'
+                          ? 'Delivery'
+                      : order.table?.number
+                        ? `Mesa ${order.table.number}`
+                        : 'Sin mesa';
+
+                  return (
+                    <div key={order.id} className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-gray-800">Orden #{order.orderNumber}</p>
+                          <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleString()}</p>
+                          {(order.customer?.name || order.customer?.code) && (
+                            <p className="text-xs font-medium text-brand-600 mt-0.5">
+                              {order.customer.name || order.customer.code}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={`text-[11px] px-2 py-1 rounded-full font-semibold ${
+                            isKioskOrigin ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {sourceLabel}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-gray-600 space-y-1 max-h-20 overflow-y-auto">
+                        {order.items.slice(0, 4).map((item) => (
+                          <p key={item.id}>{item.quantity}x {item.productName}</p>
+                        ))}
+                        {order.items.length > 4 && (
+                          <p className="text-gray-400">+{order.items.length - 4} item(s) mas...</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                        <span className="text-sm text-gray-500">Total</span>
+                        <span className="font-bold text-brand-600">{formatCurrency(Number(order.total || 0), settings)}</span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {order.status === 'pending' && (
+                          <button
+                            onClick={() => openCancelForOrder(order)}
+                            className="flex-none py-2 px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-semibold transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openBillingForOrder(order)}
+                          className="flex-1 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold"
+                        >
+                          Facturar orden
+                        </button>
+                      </div>
+                    </div>
+                  );
                 })}
               </>
             )}
@@ -1839,6 +1944,7 @@ export default function PosPage() {
           </div>
         </div>
       </div>
+
     </>
   );
 }

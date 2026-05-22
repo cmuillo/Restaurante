@@ -19,6 +19,7 @@ interface OrderRow {
   kitchenPrintedAt?: string | null;
   table?: { number: number };
   userId?: string | null;
+  user?: { id: string; name: string; role: string } | null;
   items?: {
     id: string;
     productName: string;
@@ -388,6 +389,9 @@ export default function OrdersPage() {
                           <p><strong>Cantidad total:</strong> {(o.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)}</p>
                           <p><strong>Tiempo prep:</strong> {minutesBetween(o.preparationStartedAt, o.readyAt)}</p>
                           <p><strong>Total cocina:</strong> {minutesBetween(o.createdAt, o.readyAt)}</p>
+                          {o.user && (
+                            <p><strong>Mesero:</strong> {o.user.name}</p>
+                          )}
                         </div>
 
                         <div className="border border-gray-200 rounded-lg overflow-hidden">

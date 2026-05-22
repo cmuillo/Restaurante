@@ -100,6 +100,7 @@ type SalesRangeResponse = {
     debitNotesCount: number;
     tax: number;
     pointsDiscount: number;
+    tipAmount: number;
     invoicesWithPoints: number;
   }>;
 };
@@ -222,6 +223,14 @@ export default function ReportsPage() {
     enabled: !!branchId,
   });
 
+  type TipsByWaiterItem = { waiterId: string; waiterName: string; invoiceCount: number; totalTips: number };
+  const { data: tipsByWaiter = [] } = useQuery<TipsByWaiterItem[]>({
+    queryKey: ['reports-tips-by-waiter', branchId, from, to],
+    queryFn: () =>
+      api.get(`/reports/tips-by-waiter?branchId=${branchId}&from=${from}&to=${to}`).then((r) => r.data),
+    enabled: !!branchId && settings.tipsEnabled,
+  });
+
   const paymentSummary = useMemo(() => {
     const map = new Map<string, { invoices: number; total: number }>();
 
@@ -340,60 +349,60 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="bg-amber-500/15 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-amber-500/20 rounded-lg p-2 text-2xl flex-shrink-0">💰</div>
+        <div className="bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-amber-100 dark:bg-amber-500/20 rounded-lg p-2 text-2xl flex-shrink-0">💰</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-amber-300 truncate">Ventas netas</p>
-            <p className="text-xl font-bold text-amber-100 mt-0.5 truncate">{formatCurrency(salesRange?.netSales || 0, settings)}</p>
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-300 truncate">Ventas netas</p>
+            <p className="text-xl font-bold text-amber-900 dark:text-amber-100 mt-0.5 truncate">{formatCurrency(salesRange?.netSales || 0, settings)}</p>
           </div>
         </div>
-        <div className="bg-slate-500/15 border border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
+        <div className="bg-slate-50 dark:bg-slate-500/15 border border-slate-200 dark:border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-slate-100 dark:bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-slate-300 truncate">Ventas facturadas</p>
-            <p className="text-xl font-bold text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.billedSales || salesRange?.billedTotal || 0, settings)}</p>
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-300 truncate">Ventas facturadas</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.billedSales || salesRange?.billedTotal || 0, settings)}</p>
           </div>
         </div>
-        <div className="bg-rose-500/15 border border-rose-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-rose-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📉</div>
+        <div className="bg-rose-50 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-rose-100 dark:bg-rose-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📉</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-rose-300 truncate">NC emitidas</p>
-            <p className="text-xl font-bold text-rose-100 mt-0.5 truncate">{formatCurrency(salesRange?.creditNotesTotal || 0, settings)}</p>
+            <p className="text-xs font-medium text-rose-700 dark:text-rose-300 truncate">NC emitidas</p>
+            <p className="text-xl font-bold text-rose-900 dark:text-rose-100 mt-0.5 truncate">{formatCurrency(salesRange?.creditNotesTotal || 0, settings)}</p>
           </div>
         </div>
-        <div className="bg-purple-500/15 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-purple-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📈</div>
+        <div className="bg-purple-50 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-purple-100 dark:bg-purple-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📈</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-purple-300 truncate">ND emitidas</p>
-            <p className="text-xl font-bold text-purple-100 mt-0.5 truncate">{formatCurrency(salesRange?.debitNotesTotal || 0, settings)}</p>
+            <p className="text-xs font-medium text-purple-700 dark:text-purple-300 truncate">ND emitidas</p>
+            <p className="text-xl font-bold text-purple-900 dark:text-purple-100 mt-0.5 truncate">{formatCurrency(salesRange?.debitNotesTotal || 0, settings)}</p>
           </div>
         </div>
-        <div className="bg-slate-500/15 border border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📑</div>
+        <div className="bg-slate-50 dark:bg-slate-500/15 border border-slate-200 dark:border-slate-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-slate-100 dark:bg-slate-500/20 rounded-lg p-2 text-2xl flex-shrink-0">📑</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-slate-300 truncate">Impuestos</p>
-            <p className="text-xl font-bold text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.tax || 0, settings)}</p>
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-300 truncate">Impuestos</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-0.5 truncate">{formatCurrency(salesRange?.tax || 0, settings)}</p>
           </div>
         </div>
-        <div className="bg-red-500/15 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-red-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
+        <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-red-100 dark:bg-red-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🧾</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-red-300 truncate">Gastos</p>
-            <p className="text-xl font-bold text-red-100 mt-0.5 truncate">{formatCurrency(totalExpenses, settings)}</p>
+            <p className="text-xs font-medium text-red-700 dark:text-red-300 truncate">Gastos</p>
+            <p className="text-xl font-bold text-red-900 dark:text-red-100 mt-0.5 truncate">{formatCurrency(totalExpenses, settings)}</p>
           </div>
         </div>
-        <div className={`rounded-xl p-4 flex items-center gap-3 ${net >= 0 ? 'bg-green-500/15 border border-green-500/30' : 'bg-red-500/15 border border-red-500/30'}`}>
-          <div className={`rounded-lg p-2 text-2xl flex-shrink-0 ${net >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>📊</div>
+        <div className={`rounded-xl p-4 flex items-center gap-3 ${net >= 0 ? 'bg-green-50 dark:bg-green-500/15 border border-green-200 dark:border-green-500/30' : 'bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30'}`}>
+          <div className={`rounded-lg p-2 text-2xl flex-shrink-0 ${net >= 0 ? 'bg-green-100 dark:bg-green-500/20' : 'bg-red-100 dark:bg-red-500/20'}`}>📊</div>
           <div className="min-w-0">
-            <p className={`text-xs font-medium truncate ${net >= 0 ? 'text-green-300' : 'text-red-300'}`}>Resultado neto</p>
-            <p className={`text-xl font-bold mt-0.5 truncate ${net >= 0 ? 'text-green-100' : 'text-red-100'}`}>{formatCurrency(net, settings)}</p>
+            <p className={`text-xs font-medium truncate ${net >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>Resultado neto</p>
+            <p className={`text-xl font-bold mt-0.5 truncate ${net >= 0 ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100'}`}>{formatCurrency(net, settings)}</p>
           </div>
         </div>
-        <div className="bg-blue-500/15 border border-blue-500/30 rounded-xl p-4 flex items-center gap-3">
-          <div className="bg-blue-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🎯</div>
+        <div className="bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-blue-100 dark:bg-blue-500/20 rounded-lg p-2 text-2xl flex-shrink-0">🎯</div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-blue-300 truncate">Desc. por puntos</p>
-            <p className="text-xl font-bold text-blue-100 mt-0.5 truncate">{formatCurrency(totalPointsDiscount, settings)}</p>
+            <p className="text-xs font-medium text-blue-700 dark:text-blue-300 truncate">Desc. por puntos</p>
+            <p className="text-xl font-bold text-blue-900 dark:text-blue-100 mt-0.5 truncate">{formatCurrency(totalPointsDiscount, settings)}</p>
           </div>
         </div>
       </div>
@@ -404,13 +413,14 @@ export default function ReportsPage() {
           <button
             onClick={() => downloadCsv(
               `reporte_libro_diario_${fileSuffix}.csv`,
-              ['Fecha', 'Facturas', 'NC', 'ND', 'Impuestos', 'Descuento puntos', 'Ventas facturadas', 'Ventas netas'],
+              ['Fecha', 'Facturas', 'NC', 'ND', 'Impuestos', ...(settings.tipsEnabled ? ['Cargo de servicio'] : []), 'Descuento puntos', 'Ventas facturadas', 'Ventas netas'],
               (salesRange?.dailyBreakdown || []).map((row: any) => [
                 dateOnly(row.date),
                 row.orderCount,
                 Number(row.creditNotesTotal || 0).toFixed(2),
                 Number(row.debitNotesTotal || 0).toFixed(2),
                 Number(row.tax || 0).toFixed(2),
+                ...(settings.tipsEnabled ? [Number(row.tipAmount || 0).toFixed(2)] : []),
                 Number(row.pointsDiscount || 0).toFixed(2),
                 Number(row.billedTotal || 0).toFixed(2),
                 Number(row.total || 0).toFixed(2),
@@ -430,6 +440,7 @@ export default function ReportsPage() {
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">NC</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">ND</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Impuestos</th>
+                {settings.tipsEnabled && <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Cargo servicio</th>}
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Descuento puntos</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Facturado</th>
                 <th className="px-4 py-2 text-left text-xs uppercase text-gray-600">Neto</th>
@@ -443,6 +454,7 @@ export default function ReportsPage() {
                   <td className="px-4 py-2">{formatCurrency(row.creditNotesTotal || 0, settings)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.debitNotesTotal || 0, settings)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.tax || 0, settings)}</td>
+                  {settings.tipsEnabled && <td className="px-4 py-2">{formatCurrency(row.tipAmount || 0, settings)}</td>}
                   <td className="px-4 py-2">{formatCurrency(row.pointsDiscount || 0, settings)}</td>
                   <td className="px-4 py-2">{formatCurrency(row.billedTotal || 0, settings)}</td>
                   <td className="px-4 py-2 font-semibold">{formatCurrency(row.total || 0, settings)}</td>
@@ -945,6 +957,59 @@ export default function ReportsPage() {
           </table>
         </div>
       </div>
+
+      {settings.tipsEnabled && (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-gray-900">Cargo de servicio por mesero</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{settings.tipPercentage ?? 10}% aplicado al subtotal de cada orden</p>
+            </div>
+            <button
+              onClick={() => downloadCsv(
+                `reporte_cargo_servicio_${fileSuffix}.csv`,
+                ['Mesero', 'Facturas', 'Total cargo de servicio'],
+                tipsByWaiter.map((row) => [row.waiterName, row.invoiceCount, row.totalTips.toFixed(2)]),
+              )}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+            >
+              Exportar CSV
+            </button>
+          </div>
+          <div className="overflow-auto max-h-80">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-2 text-left">Mesero</th>
+                  <th className="px-4 py-2 text-right">Facturas</th>
+                  <th className="px-4 py-2 text-right">Total cargo de servicio</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tipsByWaiter.map((row) => (
+                  <tr key={row.waiterId} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-900">{row.waiterName}</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{row.invoiceCount}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-amber-700">{formatCurrency(row.totalTips, settings)}</td>
+                  </tr>
+                ))}
+                {tipsByWaiter.length > 0 && (
+                  <tr className="bg-amber-50 font-bold">
+                    <td className="px-4 py-2 text-gray-900">Total</td>
+                    <td className="px-4 py-2 text-right text-gray-700">{tipsByWaiter.reduce((a, r) => a + r.invoiceCount, 0)}</td>
+                    <td className="px-4 py-2 text-right text-amber-800">{formatCurrency(tipsByWaiter.reduce((a, r) => a + r.totalTips, 0), settings)}</td>
+                  </tr>
+                )}
+                {tipsByWaiter.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-gray-500">Sin cargo de servicio registrado en el rango seleccionado.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

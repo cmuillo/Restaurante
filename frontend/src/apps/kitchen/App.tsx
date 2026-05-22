@@ -4,6 +4,28 @@ import api from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
 import { useAuthStore } from '../../stores/auth.store';
 
+function playBell() {
+  try {
+    const ctx = new AudioContext();
+    const harmonics: [number, number][] = [[880, 0.5], [1320, 0.3], [2200, 0.15]];
+    harmonics.forEach(([freq, vol]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.4);
+    });
+    setTimeout(() => ctx.close(), 1800);
+  } catch (_) {
+    // Audio no disponible
+  }
+}
+
 interface OrderItem {
   id: string;
   productName: string;
@@ -412,7 +434,7 @@ export default function App() {
   useSocket({
     branchId,
     events: {
-      'kitchen:new_order': () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
+      'kitchen:new_order': () => { playBell(); qc.invalidateQueries({ queryKey: ['kitchen-orders'] }); },
       'order:status_updated': () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
       'order:ready': () => qc.invalidateQueries({ queryKey: ['kitchen-orders'] }),
     },

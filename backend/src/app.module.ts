@@ -16,6 +16,7 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { ReportsModule } from './reports/reports.module';
 import { CustomersModule } from './customers/customers.module';
 import { KioskModule } from './kiosk/kiosk.module';
+import { WaiterModule } from './waiter/waiter.module';
 import { AuditModule } from './audit/audit.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { SettingsModule } from './settings/settings.module';
@@ -64,6 +65,7 @@ import { QuotationsModule } from './quotations/quotations.module';
     ReportsModule,
     CustomersModule,
     KioskModule,
+    WaiterModule,
     AuditModule,
     WebsocketsModule,
     SettingsModule,

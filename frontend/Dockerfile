@@ -27,6 +27,7 @@ COPY --from=builder /app/dist/admin  /usr/share/nginx/html/admin
 COPY --from=builder /app/dist/pos    /usr/share/nginx/html/pos
 COPY --from=builder /app/dist/kitchen /usr/share/nginx/html/kitchen
 COPY --from=builder /app/dist/kiosk  /usr/share/nginx/html/kiosk
+COPY --from=builder /app/dist/waiter /usr/share/nginx/html/waiter
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Variable por defecto (Docker Compose local)

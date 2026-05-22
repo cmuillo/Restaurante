@@ -464,6 +464,9 @@ export default function DashboardPage() {
         <StatCard label="Ticket promedio"   value={formatCurrency(dailySales?.avgTicket ?? 0, settings)}    icon="🧾" color="indigo" />
         <StatCard label="Impuestos"         value={formatCurrency(dailySales?.totalTax ?? 0, settings)}     icon="📑" color="slate" />
         <StatCard label="Desc. puntos (día)" value={formatCurrency(dailySales?.pointsDiscount ?? 0, settings)} icon="🎯" color="rose" />
+        {settings.tipsEnabled && (
+          <StatCard label={`Cargo de servicio (${settings.tipPercentage ?? 10}%) hoy`} value={formatCurrency(dailySales?.totalTip ?? 0, settings)} icon="🤝" color="amber" />
+        )}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 dark:bg-white/5 dark:border-white/10">

@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
   const loginLogoInputRef = useRef<HTMLInputElement>(null);
+  const carouselInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
   const { activeBranchId } = useBranchStore();
 
@@ -166,11 +167,6 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleTipSuggestions = (raw: string) => {
-    const nums = raw.split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n) && n > 0);
-    update('tipSuggestions', nums);
-  };
-
   const handleLoginLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,6 +177,35 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = () => update('loginLogoBase64', reader.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleCarouselImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const current_images = (current.kioskCarouselImages ?? []);
+    if (current_images.length + files.length > 10) {
+      setError('Máximo 10 imágenes en el carrusel.');
+      return;
+    }
+    files.forEach((file) => {
+      if (file.size > 3 * 1024 * 1024) {
+        setError(`La imagen "${file.name}" supera 3 MB.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        update('kioskCarouselImages', [...(current.kioskCarouselImages ?? []), reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    // limpiar input para permitir re-seleccionar
+    if (carouselInputRef.current) carouselInputRef.current.value = '';
+  };
+
+  const handleCarouselImageRemove = (idx: number) => {
+    const imgs = [...(current.kioskCarouselImages ?? [])];
+    imgs.splice(idx, 1);
+    update('kioskCarouselImages', imgs);
   };
 
   if (isLoading) {
@@ -729,9 +754,9 @@ export default function SettingsPage() {
               </strong>
             </div>
 
-            <SectionTitle>Impuestos y propinas</SectionTitle>
+            <SectionTitle>Impuestos</SectionTitle>
 
-            <Field label="Tasa de impuesto por defecto (%)" hint="Costa Rica: 13%. Se aplica a nuevas sucursales.">
+            <Field label="IVA por defecto para productos nuevos (%)" hint="Costa Rica: 13%. Solo aplica al crear productos o sucursales nuevas.">
               <input
                 className={INPUT}
                 type="number"
@@ -743,14 +768,36 @@ export default function SettingsPage() {
               />
             </Field>
 
-            <Field label="Sugerencias de propina (%)" hint="Porcentajes separados por coma. Ej: 10, 15, 18">
-              <input
-                className={INPUT}
-                value={(current.tipSuggestions ?? []).join(', ')}
-                onChange={(e) => handleTipSuggestions(e.target.value)}
-                placeholder="10, 15, 18"
-              />
-            </Field>
+            <SectionTitle>Cargo de servicio (propinas)</SectionTitle>
+
+            <div className="flex items-center mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={current.tipsEnabled ?? false}
+                  onChange={(e) => update('tipsEnabled', e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  {current.tipsEnabled ? 'Cargo de servicio activado' : 'Cargo de servicio desactivado'}
+                </span>
+              </label>
+            </div>
+
+            {(current.tipsEnabled ?? false) && (
+              <Field label="Porcentaje de cargo de servicio (%)" hint="Costa Rica: 10%. Se descuenta internamente del precio de venta para el mesero.">
+                <input
+                  className={INPUT}
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  value={current.tipPercentage ?? 10}
+                  onChange={(e) => update('tipPercentage', parseFloat(e.target.value))}
+                />
+              </Field>
+            )}
+
           </div>
         )}
 
@@ -812,20 +859,99 @@ export default function SettingsPage() {
               </Field>
             </div>
 
+            {/* Carrusel de imágenes */}
+            <SectionTitle>Carrusel de imágenes</SectionTitle>
+            <p className="text-xs text-gray-500 mb-3">
+              Imágenes en formato vertical que se muestran rotando en la pantalla de bienvenida.<br />
+              <strong>Tamaño recomendado: 720 × 1080 px</strong> (proporción 2:3 vertical). Máx 3 MB por imagen. Hasta 10 imágenes.
+            </p>
+
+            {/* Miniaturas */}
+            {(current.kioskCarouselImages ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-3 mb-4">
+                {(current.kioskCarouselImages ?? []).map((img, idx) => (
+                  <div key={idx} className="relative group">
+                    <img
+                      src={img}
+                      alt={`Carrusel ${idx + 1}`}
+                      className="h-28 w-auto rounded-lg border border-gray-200 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCarouselImageRemove(idx)}
+                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow"
+                    >
+                      ✕
+                    </button>
+                    <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                      {idx + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => carouselInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <span>＋</span> Agregar imagen(es)
+              </button>
+              {(current.kioskCarouselImages ?? []).length > 0 && (
+                <span className="text-sm text-gray-500">
+                  {(current.kioskCarouselImages ?? []).length} / 10 imágenes
+                </span>
+              )}
+              <input
+                ref={carouselInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                className="hidden"
+                onChange={handleCarouselImageAdd}
+              />
+            </div>
+
+            <Field label="Tiempo por imagen (segundos)" hint="Cuántos segundos se muestra cada imagen antes de pasar a la siguiente.">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                className={INPUT}
+                value={current.kioskCarouselInterval ?? 5}
+                onChange={(e) => update('kioskCarouselInterval', Number(e.target.value))}
+              />
+            </Field>
+
             {/* Vista previa del kiosko */}
             <SectionTitle>Vista previa</SectionTitle>
             <div
-              className="rounded-xl overflow-hidden aspect-video flex flex-col items-center justify-center cursor-pointer select-none"
+              className="rounded-xl overflow-hidden aspect-[9/16] max-w-[220px] flex flex-col items-center justify-between py-6 cursor-pointer select-none"
               style={{
                 background: `linear-gradient(135deg, ${current.kioskWelcomeColor ?? '#EA580C'}, ${current.kioskWelcomeColorDark ?? '#C2410C'})`,
               }}
             >
-              {current.logoBase64
-                ? <img src={current.logoBase64} alt="Logo" className="h-16 object-contain mb-4 drop-shadow-lg" />
-                : <span className="text-5xl mb-4">🍴</span>
-              }
-              <p className="text-3xl font-black text-white mb-2">{current.kioskWelcomeMessage || '¡Bienvenido!'}</p>
-              <p className="text-sm text-white/80 animate-pulse">{current.kioskWelcomeSubtitle || 'Toca la pantalla para comenzar'}</p>
+              {/* Logo arriba */}
+              <div className="flex justify-center">
+                {current.logoBase64
+                  ? <img src={current.logoBase64} alt="Logo" className="h-12 object-contain drop-shadow-lg" />
+                  : <span className="text-4xl">🍴</span>
+                }
+              </div>
+              {/* Área de carrusel */}
+              <div className="w-4/5 aspect-[2/3] rounded-xl bg-black/20 flex items-center justify-center overflow-hidden">
+                {(current.kioskCarouselImages ?? []).length > 0
+                  ? <img src={current.kioskCarouselImages![0]} alt="Preview" className="w-full h-full object-cover" />
+                  : <span className="text-white/50 text-xs text-center px-2">Sin imágenes</span>
+                }
+              </div>
+              {/* Mensaje abajo */}
+              <div className="text-center px-2">
+                <p className="text-base font-black text-white">{current.kioskWelcomeMessage || '¡Bienvenido!'}</p>
+                <p className="text-xs text-white/80 animate-pulse mt-1">{current.kioskWelcomeSubtitle || 'Toca para comenzar'}</p>
+              </div>
             </div>
           </div>
         )}

@@ -7,7 +7,6 @@ export type KioskScreen =
   | 'MENU'
   | 'PRODUCT_DETAIL'
   | 'CART'
-  | 'PAYMENT'
   | 'CONFIRMATION';
 
 export interface KioskCustomer {

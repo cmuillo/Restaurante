@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useKioskStore } from '../store/kiosk.store';
 import type { Strings } from '../i18n/strings';
+import { useSettings } from '../../../hooks/useSettings';
+import { formatCurrency } from '../../../stores/settings.store';
 
 const AUTO_RESET_SECS = 15;
 
@@ -8,6 +10,9 @@ export default function ConfirmationScreen({ t, onReset }: { t: Strings; onReset
   const confirmedOrderNumber = useKioskStore((s) => s.confirmedOrderNumber);
   const confirmedOrderMessage = useKioskStore((s) => s.confirmedOrderMessage);
   const confirmedTableNumber = useKioskStore((s) => s.confirmedTableNumber);
+  const cart = useKioskStore((s) => s.cart);
+  const settings = useSettings();
+  const total = cart.reduce((s, i) => s + i.price * (1 + i.taxRate / 100) * i.quantity, 0);
   const [secs, setSecs] = useState(AUTO_RESET_SECS);
 
   useEffect(() => {
@@ -27,6 +32,9 @@ export default function ConfirmationScreen({ t, onReset }: { t: Strings; onReset
       <div className="bg-white dark:bg-gray-800 rounded-3xl px-12 py-6 text-center">
         <p className="text-gray-500 dark:text-gray-400 text-xl mb-2">{t.yourOrderNumber}</p>
         <p className="text-8xl font-black text-brand-400">{confirmedOrderNumber}</p>
+        {total > 0 && (
+          <p className="text-3xl font-bold text-gray-700 dark:text-gray-300 mt-3">{formatCurrency(total, settings)}</p>
+        )}
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-3xl px-8 py-5 text-center max-w-2xl">
         <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">

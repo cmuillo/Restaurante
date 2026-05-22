@@ -65,6 +65,61 @@ export class CreateInvoiceDto {
   pointsUsed?: number;
 }
 
+export class CreateTableInvoiceDto {
+  @ApiProperty({ description: 'UUID de la mesa a facturar' })
+  @IsUUID()
+  tableId: string;
+
+  @ApiProperty({ description: 'UUID de la sucursal' })
+  @IsUUID()
+  branchId: string;
+
+  @ApiProperty({ enum: PaymentMethod })
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsObject()
+  paymentDetails?: Record<string, number>;
+
+  @ApiProperty({ required: false, enum: ['CRC', 'USD', 'EUR'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currencyCode?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  exchangeRate?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  customerName?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  customerTaxId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  customerAddress?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cashReceived?: number;
+}
+
 export class CreateCreditNoteDto {
   @ApiProperty({ description: 'Motivo de la nota de credito' })
   @IsString()

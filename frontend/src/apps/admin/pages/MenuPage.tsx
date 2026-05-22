@@ -470,6 +470,35 @@ export default function MenuPage() {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 truncate">{p.name}</p>
                 <p className="text-sm text-brand-600 font-semibold">{formatCurrency(p.price, settings)}</p>
+                {(() => {
+                  const tax = p.taxRate ?? 0;
+                  const tip = settings.tipsEnabled ? (settings.tipPercentage ?? 10) : 0;
+                  if (tax === 0 && tip === 0) return null;
+                  const divisor = 1 + tax / 100 + tip / 100;
+                  const base = p.price / divisor;
+                  const ivaAmt = base * tax / 100;
+                  const tipAmt = base * tip / 100;
+                  return (
+                    <div className="text-[10px] text-gray-400 mt-1 space-y-0.5 border-t border-gray-100 pt-1">
+                      {tax > 0 && (
+                        <div className="flex justify-between">
+                          <span>IVA ({tax}%)</span>
+                          <span>{formatCurrency(ivaAmt, settings)}</span>
+                        </div>
+                      )}
+                      {settings.tipsEnabled && (
+                        <div className="flex justify-between text-amber-600">
+                          <span>Cargo serv. ({tip}%)</span>
+                          <span>{formatCurrency(tipAmt, settings)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-green-700 font-semibold">
+                        <span>Ingreso neto</span>
+                        <span>{formatCurrency(base, settings)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {p.sku && <p className="text-xs text-gray-400">Cod: {p.sku}</p>}
                 {p.cabysCode && <p className="text-[11px] text-gray-500">CABYS: {p.cabysCode}</p>}
                 {p.showInKiosk === false && <p className="text-[11px] text-amber-600">No visible en kiosko</p>}

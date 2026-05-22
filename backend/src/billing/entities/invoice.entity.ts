@@ -33,6 +33,12 @@ export class Invoice {
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
+  @Column('uuid', { nullable: true })
+  tableId: string | null;
+
+  @Column('jsonb', { nullable: true })
+  orderIds: string[] | null; // todas las órdenes incluidas en esta factura (para mesas)
+
   @Column({ unique: true })
   invoiceNumber: string; // ej: F-000023
 

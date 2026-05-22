@@ -10,7 +10,6 @@ import OrderTypeScreen from './screens/OrderTypeScreen';
 import MenuScreen from './screens/MenuScreen';
 import ProductDetailScreen from './screens/ProductDetailScreen';
 import CartScreen from './screens/CartScreen';
-import PaymentScreen from './screens/PaymentScreen';
 import ConfirmationScreen from './screens/ConfirmationScreen';
 
 // branchId fijo para el kiosco, configurado por query string o env
@@ -36,7 +35,7 @@ function getKioskErrorMessage(error: any): string {
 export default function App() {
   useSettingsLoader();
   const settings = useSettings();
-  const { screen, cart, reset, touch, setConfirmedOrder, orderType } = useKioskStore();
+  const { screen, cart, reset, touch, setConfirmedOrder } = useKioskStore();
   const t = i18n.es;
 
   // Aplicar/quitar clase dark en <html> según el tema de configuración
@@ -106,17 +105,16 @@ export default function App() {
     ORDER_TYPE: <OrderTypeScreen t={t} />,
     MENU: <MenuScreen t={t} branchId={BRANCH_ID} />,
     PRODUCT_DETAIL: <ProductDetailScreen t={t} branchId={BRANCH_ID} />,
-    CART: <CartScreen t={t} isPending={placeOrder.isPending} />,
-    PAYMENT: (
-      <PaymentScreen
+    CART: (
+      <CartScreen
         t={t}
-        onPayment={(method) => placeOrder.mutate(method)}
         isPending={placeOrder.isPending}
-        paymentError={placeOrder.isError ? getKioskErrorMessage(placeOrder.error) : ''}
-        orderType={orderType}
+        onPlaceOrder={() => placeOrder.mutate('CASH')}
+        placeOrderError={placeOrder.isError ? getKioskErrorMessage(placeOrder.error) : undefined}
       />
     ),
     CONFIRMATION: <ConfirmationScreen t={t} onReset={reset} />,
+
   };
 
   return (

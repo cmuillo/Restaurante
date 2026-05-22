@@ -4,9 +4,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Order, OrderStatus, OrderType } from './entities/order.entity';
+import { Invoice } from '../billing/entities/invoice.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemModifier } from './entities/order-item-modifier.entity';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { Product } from '../menu/entities/product.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
@@ -122,7 +123,7 @@ export class OrdersService {
 
       const effectiveTaxPercentage = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
       const tipAmount = subtotal * ((dto.tipPercentage ?? 0) / 100);
-      const total = subtotal + taxAmount + tipAmount - (dto.discountAmount || 0);
+      const total = subtotal + taxAmount - (dto.discountAmount || 0);
 
       // Número de orden secuencial por sucursal
       const lastOrder = await manager.findOne(Order, {
@@ -190,6 +191,7 @@ export class OrdersService {
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.modifiers', 'modifiers')
       .leftJoinAndSelect('order.table', 'table')
+      .leftJoinAndSelect('order.user', 'user')
       .leftJoinAndSelect('order.customer', 'customer')
       .leftJoinAndSelect('order.invoice', 'invoice')
       .where('order.branchId = :branchId', { branchId });
@@ -201,7 +203,40 @@ export class OrdersService {
       query.andWhere('order.type = :type', { type: filters.type });
     }
 
-    return query.orderBy('order.createdAt', 'DESC').getMany();
+    const orders = await query.orderBy('order.createdAt', 'DESC').getMany();
+
+    // Inyectar factura en órdenes que forman parte de una factura combinada de mesa
+    // pero no son la orden primaria (no tienen FK directa en invoice.orderId)
+    const ordersWithoutInvoice = orders.filter((o) => !o.invoice);
+    if (ordersWithoutInvoice.length > 0) {
+      const tableInvoices = await this.dataSource
+        .getRepository(Invoice)
+        .createQueryBuilder('inv')
+        .innerJoin('inv.order', 'primaryOrder')
+        .where('primaryOrder.branchId = :branchId', { branchId })
+        .andWhere('inv.orderIds IS NOT NULL')
+        .select(['inv.id', 'inv.orderId', 'inv.orderIds', 'inv.invoiceNumber', 'inv.status', 'inv.paymentMethod', 'inv.total', 'inv.createdAt'])
+        .getMany();
+
+      if (tableInvoices.length > 0) {
+        const orderToInvoice = new Map<string, Invoice>();
+        for (const inv of tableInvoices) {
+          for (const oid of (inv.orderIds ?? [])) {
+            if (oid !== inv.orderId) {
+              orderToInvoice.set(oid, inv);
+            }
+          }
+        }
+        for (const order of ordersWithoutInvoice) {
+          const inv = orderToInvoice.get(order.id);
+          if (inv) {
+            order.invoice = inv;
+          }
+        }
+      }
+    }
+
+    return orders;
   }
 
   async findOne(id: string, branchId: string): Promise<Order> {
@@ -284,5 +319,113 @@ export class OrdersService {
       { status: OrderStatus.CANCELLED, reason },
       userId,
     );
+  }
+
+  async addItemsToOrder(
+    orderId: string,
+    branchId: string,
+    items: CreateOrderItemDto[],
+    userId?: string,
+  ): Promise<Order> {
+    const order = await this.findOne(orderId, branchId);
+
+    const notAddable: OrderStatus[] = [OrderStatus.CANCELLED, OrderStatus.COMPLETED];
+    if (notAddable.includes(order.status)) {
+      throw new BadRequestException(
+        `No se pueden agregar ítems a una orden en estado ${order.status}`,
+      );
+    }
+
+    const uniqueProductIds = [...new Set(items.map((i) => i.productId))];
+    const products = await this.productRepository.findBy({ id: In(uniqueProductIds) });
+    const productsById = new Map(products.map((p) => [p.id, p]));
+
+    await this.dataSource.transaction(async (manager) => {
+      const newItems: Partial<OrderItem>[] = items.map((item) => {
+        const product = productsById.get(item.productId);
+        if (!product) throw new BadRequestException(`Producto no encontrado: ${item.productId}`);
+
+        const lineTaxRate = product.taxRate == null ? order.taxPercentage : Number(product.taxRate);
+        const modifiers: Partial<OrderItemModifier>[] = (item.modifiers ?? []).map((m) => ({
+          modifierOptionId: m.modifierOptionId,
+          optionName: m.optionName,
+          extraPrice: m.extraPrice,
+        }));
+
+        let lineTotal = item.unitPrice * item.quantity;
+        for (const mod of item.modifiers ?? []) {
+          lineTotal += mod.extraPrice * item.quantity;
+        }
+
+        return {
+          orderId: order.id,
+          productId: item.productId,
+          productName: item.productName,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          subtotal: lineTotal,
+          notes: item.notes,
+          cabysCode: product.cabysCode,
+          commercialCodeType: product.commercialCodeType,
+          commercialCode: product.commercialCode,
+          taxCode: product.taxCode,
+          taxRate: lineTaxRate,
+          unitOfMeasure: product.unitOfMeasure,
+          isBar: product.isBar ?? false,
+          modifiers: modifiers as OrderItemModifier[],
+        };
+      });
+
+      await manager.save(OrderItem, newItems as OrderItem[]);
+
+      // Recalcular totales de la orden
+      const allItems = await manager.find(OrderItem, {
+        where: { orderId: order.id },
+        relations: ['modifiers'],
+      });
+
+      let subtotal = 0;
+      let taxAmount = 0;
+      for (const it of allItems) {
+        const lineSubtotal = Number(it.unitPrice) * it.quantity
+          + (it.modifiers ?? []).reduce((s, m) => s + Number(m.extraPrice) * it.quantity, 0);
+        const lineTax = lineSubtotal * (Number(it.taxRate) / 100);
+        subtotal += lineSubtotal;
+        taxAmount += lineTax;
+      }
+
+      const effectiveTaxPct = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+      const tipAmt = subtotal * (Number(order.tipPercentage) / 100);
+      const total = subtotal + taxAmount + tipAmt - Number(order.discountAmount);
+
+      await manager.update(Order, { id: order.id }, {
+        subtotal,
+        taxPercentage: effectiveTaxPct,
+        taxAmount,
+        total,
+      });
+    });
+
+    const updated = await this.findOne(orderId, branchId);
+
+    this.gateway.emitNewOrder(branchId, {
+      id: updated.id,
+      orderNumber: updated.orderNumber,
+      type: updated.type,
+      tableId: updated.tableId,
+      items: items,
+      createdAt: updated.createdAt,
+    });
+
+    await this.auditService.log({
+      branchId,
+      userId,
+      action: 'order.addItems',
+      entity: 'Order',
+      entityId: order.id,
+      newValue: { itemsAdded: items.length },
+    });
+
+    return updated;
   }
 }

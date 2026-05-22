@@ -18,6 +18,7 @@ interface BillingModalProps {
   order: {
     id: string;
     orderNumber: number;
+    status?: string;
     subtotal: number;
     taxAmount: number;
     tipAmount: number;
@@ -48,6 +49,10 @@ interface BillingModalProps {
   initialStep?: 'payment' | 'cancelling';
   onClose: () => void;
   onCancelled?: () => void;
+  /** Table billing mode: when set, uses the consolidated table invoice endpoint */
+  tableId?: string;
+  tableNumber?: number;
+  tableOrderNumbers?: number[];
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'mixed' | 'sinpe';
@@ -216,7 +221,7 @@ function buildPos80mmReceiptHtml(params: {
 </html>`;
 }
 
-export function BillingModal({ isOpen, branchId, order, customer, initialStep = 'payment', onClose, onCancelled }: BillingModalProps) {
+export function BillingModal({ isOpen, branchId, order, customer, initialStep = 'payment', onClose, onCancelled, tableId, tableNumber, tableOrderNumbers }: BillingModalProps) {
   const settings = useSettings();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashReceived, setCashReceived] = useState<number>(0);
@@ -321,8 +326,25 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
   });
 
   const createInvoice = useMutation({
-    mutationFn: () =>
-      api
+    mutationFn: () => {
+      if (tableId) {
+        return api.post('/billing/invoices/table', {
+          tableId,
+          branchId,
+          paymentMethod,
+          paymentDetails: paymentMethod === 'mixed'
+            ? { cash: mixedCashAmount, card: Math.max(0, discountedTotal - mixedCashAmount) }
+            : undefined,
+          cashReceived: paymentMethod === 'cash'
+            ? cashReceived
+            : paymentMethod === 'mixed'
+              ? mixedCashReceived
+              : 0,
+          currencyCode: currencyCode !== 'CRC' ? currencyCode : undefined,
+          exchangeRate: currencyCode !== 'CRC' ? exchangeRate : undefined,
+        }).then((r) => r.data);
+      }
+      return api
         .post('/billing/invoices', {
           orderId: order?.id,
           paymentMethod,
@@ -342,7 +364,8 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
           currencyCode: currencyCode !== 'CRC' ? currencyCode : undefined,
           exchangeRate: currencyCode !== 'CRC' ? exchangeRate : undefined,
         })
-        .then((r) => r.data),
+        .then((r) => r.data);
+    },
     onSuccess: (data) => {
       setInvoice(data);
       setStep('invoice');
@@ -451,7 +474,10 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
             {/* Header */}
             <div className="bg-gradient-to-r from-brand-600 to-brand-700 px-6 py-4 rounded-t-xl">
               <h2 className="text-xl font-bold text-white">Procesar Pago</h2>
-              <p className="text-brand-100 text-sm">Orden #{order.orderNumber}</p>
+              {tableId
+                ? <p className="text-brand-100 text-sm">Mesa {tableNumber} &mdash; {tableOrderNumbers?.map((n) => `#${n}`).join(', ')}</p>
+                : <p className="text-brand-100 text-sm">Orden #{order.orderNumber}</p>
+              }
             </div>
 
             {/* Contenido */}
@@ -461,6 +487,14 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-medium">{formatCurrency(subtotal, settings)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">
+                    {settings.tipsEnabled && tipAmount > 0
+                      ? `Cargo de servicio (${settings.tipPercentage ?? 10}%)`
+                      : 'Cargo de servicio'}
+                  </span>
+                  <span className="font-medium">{formatCurrency(tipAmount, settings)}</span>
                 </div>
                 {effectiveTaxAmount > 0 && (
                   <div className="flex justify-between text-sm">
@@ -472,12 +506,6 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                   <div className="flex justify-between text-sm">
                     <span className="text-amber-600 font-medium">Impuestos (Exonerado)</span>
                     <span className="font-medium text-amber-600">₡0,00</span>
-                  </div>
-                )}
-                {tipAmount > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Propina</span>
-                    <span className="font-medium">{formatCurrency(tipAmount, settings)}</span>
                   </div>
                 )}
                 {discountAmount > 0 && (
@@ -499,7 +527,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               </div>
 
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm font-semibold text-gray-700 mb-2">Detalle de la orden</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2">{tableId ? 'Productos combinados' : 'Detalle de la orden'}</p>
                 <div className="space-y-1.5 max-h-32 overflow-y-auto">
                   {order.items?.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm">
@@ -723,13 +751,15 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 >
                   Cerrar
                 </button>
-                <button
-                  onClick={() => setStep('cancelling')}
-                  disabled={createInvoice.isPending}
-                  className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
-                >
-                  🚫 Cancelar Orden
-                </button>
+                {!tableId && order?.status === 'pending' && (
+                  <button
+                    onClick={() => setStep('cancelling')}
+                    disabled={createInvoice.isPending}
+                    className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                  >
+                    🚫 Cancelar Orden
+                  </button>
+                )}
                 <button
                   onClick={() => createInvoice.mutate()}
                   disabled={

@@ -11,6 +11,7 @@ export enum TableStatus {
   OCCUPIED = 'occupied',
   WAITING_FOOD = 'waiting_food',
   BILL_REQUESTED = 'bill_requested',
+  PAID = 'paid',
   RESERVED = 'reserved',
 }
 

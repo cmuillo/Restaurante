@@ -141,6 +141,7 @@ export class ReportsService {
           'COUNT(inv.id) AS invoices',
           'SUM(inv.total) AS total',
           'SUM(inv.taxAmount) AS tax',
+          'SUM(inv.tipAmount) AS tip_amount',
           'SUM(order.pointsDiscount) AS points_discount',
           'SUM(CASE WHEN order.pointsDiscount > 0 THEN 1 ELSE 0 END) AS invoices_with_points',
         ])
@@ -203,6 +204,7 @@ export class ReportsService {
         creditNotesCount: parseInt(cn?.count ?? '0', 10),
         debitNotesCount: parseInt(dn?.count ?? '0', 10),
         tax: parseFloat(inv?.tax ?? '0'),
+        tipAmount: parseFloat(inv?.tip_amount ?? '0'),
         pointsDiscount: parseFloat(inv?.points_discount ?? '0'),
         invoicesWithPoints: parseInt(inv?.invoices_with_points ?? '0', 10),
       };
@@ -217,6 +219,7 @@ export class ReportsService {
         creditNotesCount: acc.creditNotesCount + r.creditNotesCount,
         debitNotesCount: acc.debitNotesCount + r.debitNotesCount,
         tax: acc.tax + r.tax,
+        tipAmount: acc.tipAmount + r.tipAmount,
         pointsDiscount: acc.pointsDiscount + r.pointsDiscount,
         orders: acc.orders + r.orderCount,
         invoicesWithPoints: acc.invoicesWithPoints + r.invoicesWithPoints,
@@ -229,6 +232,7 @@ export class ReportsService {
         creditNotesCount: 0,
         debitNotesCount: 0,
         tax: 0,
+        tipAmount: 0,
         pointsDiscount: 0,
         orders: 0,
         invoicesWithPoints: 0,
@@ -492,5 +496,37 @@ export class ReportsService {
         closedBy: shift.closedBy ? { id: shift.closedBy.id, name: shift.closedBy.name } : null,
       };
     });
+  }
+
+  /** Cargo de servicio (propinas) agrupado por mesero en el rango de fechas */
+  async tipsByWaiter(branchId: string, from: Date, to: Date) {
+    const { fromStart, toExclusive } = this.normalizeDateRange(from, to);
+
+    const rows = await this.invoiceRepository
+      .createQueryBuilder('inv')
+      .leftJoin('inv.order', 'ord')
+      .leftJoin('ord.user', 'usr')
+      .select([
+        'ord.userId AS waiter_id',
+        'COALESCE(usr.name, \'Sin nombre\') AS waiter_name',
+        'COUNT(inv.id) AS invoice_count',
+        'COALESCE(SUM(inv.tipAmount), 0) AS total_tips',
+      ])
+      .where('ord.branchId = :branchId', { branchId })
+      .andWhere('inv.createdAt >= :from', { from: fromStart })
+      .andWhere('inv.createdAt < :to', { to: toExclusive })
+      .andWhere("inv.status = 'issued'")
+      .andWhere('inv.tipAmount > 0')
+      .groupBy('ord.userId')
+      .addGroupBy('usr.name')
+      .orderBy('total_tips', 'DESC')
+      .getRawMany();
+
+    return rows.map((r) => ({
+      waiterId: r.waiter_id as string,
+      waiterName: r.waiter_name as string,
+      invoiceCount: parseInt(r.invoice_count ?? '0', 10),
+      totalTips: parseFloat(r.total_tips ?? '0'),
+    }));
   }
 }

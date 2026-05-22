@@ -68,9 +68,13 @@ export class GlobalSettings {
   @Column('decimal', { precision: 5, scale: 2, default: 13 })
   defaultTaxRate: number;
 
-  /** Porcentajes de propina sugeridos */
-  @Column('jsonb', { default: [10, 15, 18] })
-  tipSuggestions: number[];
+  /** Cargo de servicio habilitado (ej: Costa Rica 10%) */
+  @Column({ default: false })
+  tipsEnabled: boolean;
+
+  /** Porcentaje del cargo de servicio (%) */
+  @Column('decimal', { precision: 5, scale: 2, default: 10 })
+  tipPercentage: number;
 
   /** Mensaje de pie de página en facturas impresas */
   @Column({ length: 500, nullable: true })
@@ -92,6 +96,14 @@ export class GlobalSettings {
   /** Subtítulo / instrucción del kiosko */
   @Column({ length: 200, default: 'Toca la pantalla para comenzar tu pedido' })
   kioskWelcomeSubtitle: string;
+
+  /** Imágenes del carrusel de la pantalla de bienvenida (base64 data-URLs) */
+  @Column('jsonb', { default: [] })
+  kioskCarouselImages: string[];
+
+  /** Tiempo en segundos que dura cada imagen del carrusel (defecto: 5) */
+  @Column({ type: 'int', default: 5 })
+  kioskCarouselInterval: number;
 
   // ─── Regional ─────────────────────────────────────────────────────────────
   /** Zona horaria IANA (ej: America/Costa_Rica) */

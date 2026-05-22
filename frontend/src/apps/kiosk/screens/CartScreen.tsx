@@ -6,9 +6,13 @@ import { formatCurrency } from '../../../stores/settings.store';
 export default function CartScreen({
   t,
   isPending,
+  onPlaceOrder,
+  placeOrderError,
 }: {
   t: Strings;
   isPending: boolean;
+  onPlaceOrder: () => void;
+  placeOrderError?: string;
 }) {
   const { cart, removeFromCart, goTo, customer } = useKioskStore();
   const settings = useSettings();
@@ -63,12 +67,17 @@ export default function CartScreen({
           {isExempt && (
             <p className="text-xs text-amber-400 text-center">IVA exonerado — se reflejará en la factura</p>
           )}
+          {placeOrderError && (
+            <p className="text-center text-red-400 text-sm bg-red-950/40 border border-red-800 rounded-xl px-4 py-3">
+              {placeOrderError}
+            </p>
+          )}
           <button
-            onClick={() => goTo('PAYMENT')}
+            onClick={onPlaceOrder}
             disabled={isPending}
             className="w-full py-5 bg-brand-600 hover:bg-brand-500 active:scale-95 disabled:opacity-50 rounded-2xl font-bold text-xl text-white transition-all"
           >
-            {t.placeOrder}
+            {isPending ? 'Procesando…' : t.placeOrder}
           </button>
         </div>
       )}

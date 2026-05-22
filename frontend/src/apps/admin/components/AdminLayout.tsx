@@ -38,6 +38,7 @@ export default function AdminLayout() {
     { href: `/pos/${selectedBranchQs}`, label: 'POS' },
     { href: `/kitchen/${selectedBranchQs}`, label: 'Kitchen' },
     { href: `/kiosk/${selectedBranchQs}`, label: 'Kiosko' },
+    { href: '/waiter/', label: 'Mesero' },
   ];
 
   const { data: branches = [] } = useQuery<Branch[]>({
