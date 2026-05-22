@@ -743,11 +743,11 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               )}
 
               {/* Botones */}
-              <div className="lg:col-span-2 flex gap-2 pt-4">
+              <div className="lg:col-span-2 flex gap-3 pt-4">
                 <button
                   onClick={onClose}
                   disabled={createInvoice.isPending}
-                  className="py-2 px-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
                 >
                   Cerrar
                 </button>
@@ -755,7 +755,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                   <button
                     onClick={() => setStep('cancelling')}
                     disabled={createInvoice.isPending}
-                    className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                    className="py-3 px-6 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
                   >
                     🚫 Cancelar Orden
                   </button>
@@ -767,7 +767,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                     || (paymentMethod === 'cash' && cashReceived < discountedTotal)
                     || (paymentMethod === 'mixed' && (mixedCashAmount <= 0 || mixedCashAmount >= discountedTotal || mixedCashReceived < mixedCashAmount))
                   }
-                  className="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
                   {createInvoice.isPending ? 'Procesando…' : 'Facturar'}
                 </button>
@@ -826,18 +826,18 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
                 </p>
               )}
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setStep('payment')}
                   disabled={cancelOrder.isPending}
-                  className="flex-1 py-2 px-3 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 font-semibold rounded-lg text-sm transition-colors"
                 >
                   Volver
                 </button>
                 <button
                   onClick={() => cancelOrder.mutate()}
                   disabled={cancelOrder.isPending}
-                  className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
                   {cancelOrder.isPending ? 'Cancelando…' : 'Confirmar Cancelación'}
                 </button>
@@ -860,7 +860,7 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
 
               <button
                 onClick={() => { onCancelled ? onCancelled() : onClose(); }}
-                className="w-full py-2 px-3 bg-gray-700 hover:bg-gray-800 text-white font-semibold rounded-lg text-sm transition-colors"
+                className="py-3 px-6 bg-gray-700 hover:bg-gray-800 text-white font-semibold rounded-lg text-sm transition-colors"
               >
                 Cerrar
               </button>
@@ -940,16 +940,16 @@ export function BillingModal({ isOpen, branchId, order, customer, initialStep = 
               </div>
 
               {/* Botones finales */}
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <button
                   onClick={printInvoiceReport}
-                  className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
                   🖨️ Imprimir
                 </button>
                 <button
                   onClick={onClose}
-                  className="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg text-sm transition-colors"
+                  className="py-3 px-6 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg text-sm transition-colors"
                 >
                   Cerrar
                 </button>

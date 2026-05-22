@@ -62,10 +62,10 @@ const STATUS_LABELS: Record<QuotationStatus, string> = {
 };
 
 const STATUS_COLORS: Record<QuotationStatus, string> = {
-  draft: 'bg-gray-500/20 text-gray-300',
-  sent: 'bg-blue-500/20 text-blue-300',
-  invoiced: 'bg-green-500/20 text-green-300',
-  expired: 'bg-red-500/20 text-red-300',
+  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300',
+  sent: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+  invoiced: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300',
+  expired: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
 };
 
 function StatusBadge({ status }: { status: QuotationStatus }) {
@@ -210,20 +210,20 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-[var(--color-bg-secondary,#1e2435)] border border-white/10 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] flex flex-col"
+        className="bg-white dark:bg-[#1e2435] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10 flex-shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/10 flex-shrink-0">
           <div className="w-9 h-9 rounded-xl bg-brand-600/20 flex items-center justify-center text-brand-400 text-lg">
             📝
           </div>
-          <h3 className="text-base font-semibold text-white flex-1">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white flex-1">
             {isEdit ? `Editar ${quotation!.quotationNumber}` : 'Nueva Cotización'}
           </h3>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-lg"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-lg"
           >
             ×
           </button>
@@ -232,7 +232,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Cliente */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Cliente</label>
+            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Cliente</label>
             <div className="relative">
               <input
                 type="text"
@@ -245,12 +245,12 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                 }}
                 onFocus={() => setShowCustomerDropdown(true)}
                 onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
+                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
               />
               {showCustomerDropdown && customers.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-10 bg-[#1e2435] border border-white/10 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 z-10 bg-white dark:bg-[#1e2435] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto">
                   <button
-                    className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-white/5"
+                    className="w-full text-left px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5"
                     onMouseDown={() => { setCustomerSearch(''); setCustomerId(''); setIsCustomerExempt(false); setShowCustomerDropdown(false); }}
                   >
                     Sin cliente
@@ -258,7 +258,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                   {customers.map((c) => (
                     <button
                       key={c.id}
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/5"
+                      className="w-full text-left px-3 py-2 text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5"
                       onMouseDown={() => {
                         setCustomerId(c.id);
                         setCustomerSearch(c.name);
@@ -267,8 +267,8 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                       }}
                     >
                       <span className="font-medium">{c.name}</span>
-                      {c.email && <span className="ml-2 text-gray-400 text-xs">{c.email}</span>}
-                      {c.isExempt && <span className="ml-2 text-xs bg-amber-500/20 text-amber-300 rounded px-1">Exonerado</span>}
+                      {c.email && <span className="ml-2 text-gray-500 dark:text-gray-400 text-xs">{c.email}</span>}
+                      {c.isExempt && <span className="ml-2 text-xs bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 rounded px-1">Exonerado</span>}
                     </button>
                   ))}
                 </div>
@@ -277,7 +277,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
             {isCustomerExempt && (
               <div className="mt-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
                 <span className="text-amber-400 text-sm">⚠</span>
-                <p className="text-xs text-amber-300">
+                <p className="text-xs text-amber-700 dark:text-amber-300">
                   <strong>Cliente exonerado de IVA</strong> — El impuesto se aplicará en 0% en esta cotización.
                 </p>
               </div>
@@ -286,7 +286,7 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
 
           {/* Agregar productos */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Agregar producto</label>
+            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Agregar producto</label>
             <div className="relative">
               <input
                 type="text"
@@ -295,14 +295,14 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                 onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
                 onFocus={() => setShowProductDropdown(true)}
                 onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
+                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
               />
               {showProductDropdown && filteredProducts.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-10 bg-[#1e2435] border border-white/10 rounded-lg shadow-xl mt-1 max-h-52 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 z-10 bg-white dark:bg-[#1e2435] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl mt-1 max-h-52 overflow-y-auto">
                   {filteredProducts.slice(0, 30).map((p) => (
                     <button
                       key={p.id}
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/5 flex justify-between"
+                      className="w-full text-left px-3 py-2 text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 flex justify-between"
                       onMouseDown={() => addProduct(p)}
                     >
                       <span>{p.name}</span>
@@ -316,29 +316,29 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
 
           {/* Tabla de items */}
           {items.length > 0 && (
-            <div className="rounded-xl border border-white/10 overflow-hidden">
+            <div className="rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-white/5">
+                <thead className="bg-gray-50 dark:bg-white/5">
                   <tr>
-                    <th className="text-left px-3 py-2 text-gray-400 font-medium">Producto</th>
-                    <th className="text-center px-3 py-2 text-gray-400 font-medium w-20">Cant.</th>
-                    <th className="text-right px-3 py-2 text-gray-400 font-medium w-28">P. Unit.</th>
-                    <th className="text-right px-3 py-2 text-gray-400 font-medium w-12">IVA%</th>
-                    <th className="text-right px-3 py-2 text-gray-400 font-medium w-28">Subtotal</th>
+                    <th className="text-left px-3 py-2 text-gray-600 dark:text-gray-400 font-medium">Producto</th>
+                    <th className="text-center px-3 py-2 text-gray-600 dark:text-gray-400 font-medium w-20">Cant.</th>
+                    <th className="text-right px-3 py-2 text-gray-600 dark:text-gray-400 font-medium w-28">P. Unit.</th>
+                    <th className="text-right px-3 py-2 text-gray-600 dark:text-gray-400 font-medium w-12">IVA%</th>
+                    <th className="text-right px-3 py-2 text-gray-600 dark:text-gray-400 font-medium w-28">Subtotal</th>
                     <th className="w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, idx) => (
-                    <tr key={idx} className="border-t border-white/5">
-                      <td className="px-3 py-2 text-white">{item.productName}</td>
+                    <tr key={idx} className="border-t border-gray-100 dark:border-white/5">
+                      <td className="px-3 py-2 text-gray-900 dark:text-white">{item.productName}</td>
                       <td className="px-3 py-2 text-center">
                         <input
                           type="number"
                           min={1}
                           value={item.quantity}
                           onChange={(e) => updateItem(idx, 'quantity', Math.max(1, Number(e.target.value)))}
-                          className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-center text-white text-xs focus:outline-none focus:border-orange-500/50"
+                          className="w-16 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-center text-gray-900 dark:text-white text-xs focus:outline-none focus:border-orange-500/50"
                         />
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -348,11 +348,11 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                           step={0.01}
                           value={item.unitPrice}
                           onChange={(e) => updateItem(idx, 'unitPrice', Number(e.target.value))}
-                          className="w-24 bg-white/5 border border-white/10 rounded px-2 py-1 text-right text-white text-xs focus:outline-none focus:border-orange-500/50"
+                          className="w-24 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-right text-gray-900 dark:text-white text-xs focus:outline-none focus:border-orange-500/50"
                         />
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-400 text-xs">{item.taxRate}%</td>
-                      <td className="px-3 py-2 text-right text-white">{fmtMoney(item.unitPrice * item.quantity)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 dark:text-gray-400 text-xs">{item.taxRate}%</td>
+                      <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{fmtMoney(item.unitPrice * item.quantity)}</td>
                       <td className="px-3 py-2 text-center">
                         <button
                           onClick={() => removeItem(idx)}
@@ -371,34 +371,34 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
           {/* Descuento y Notas */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Descuento global (₡)</label>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Descuento global (₡)</label>
               <input
                 type="number"
                 min={0}
                 step={0.01}
                 value={discountAmount}
                 onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value)))}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
+                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Notas adicionales</label>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Notas adicionales</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
                 placeholder="Condiciones, vigencia, etc."
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50 resize-none"
+                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-orange-500/50 resize-none"
               />
             </div>
           </div>
 
           {/* Totales */}
-          <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3 space-y-1">
-            <div className="flex justify-between text-sm text-gray-400">
+          <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-4 py-3 space-y-1">
+            <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
               <span>Subtotal</span><span>{fmtMoney(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm text-gray-400">
+            <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
               <span>IVA</span>
               <span className={isCustomerExempt ? 'text-amber-400' : ''}>
                 {isCustomerExempt ? '₡0.00 (Exonerado)' : fmtMoney(taxAmount)}
@@ -409,17 +409,17 @@ function QuotationModal({ branchId, quotation, onClose, onSaved }: QuotationModa
                 <span>Descuento</span><span>-{fmtMoney(discountAmount)}</span>
               </div>
             )}
-            <div className="flex justify-between text-base font-semibold text-white border-t border-white/10 pt-2 mt-2">
+            <div className="flex justify-between text-base font-semibold text-gray-900 dark:text-white border-t border-gray-200 dark:border-white/10 pt-2 mt-2">
               <span>Total</span><span>{fmtMoney(total)}</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-white/10 flex-shrink-0">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-white/10 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
           >
             Cancelar
           </button>
@@ -518,8 +518,8 @@ export default function QuotationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Cotizaciones</h1>
-          <p className="text-gray-400 text-sm mt-1">{filteredQuotations.length} cotización(es)</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cotizaciones</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{filteredQuotations.length} cotización(es)</p>
         </div>
         <button
           onClick={openCreate}
@@ -538,7 +538,7 @@ export default function QuotationsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
                 ? 'bg-brand-600 text-white'
-                : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10'
             }`}
           >
             {s === 'all' ? 'Todas' : STATUS_LABELS[s]}
@@ -547,44 +547,44 @@ export default function QuotationsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[var(--color-bg-secondary,#1e2435)] rounded-2xl border border-white/10 overflow-hidden">
+      <div className="bg-white dark:bg-[#1e2435] rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-gray-500">Cargando cotizaciones...</div>
         ) : filteredQuotations.length === 0 ? (
           <div className="p-10 text-center">
-            <p className="text-gray-400 text-lg">No hay cotizaciones</p>
-            <p className="text-gray-600 text-sm mt-1">Crea la primera con el botón de arriba</p>
+            <p className="text-gray-500 dark:text-gray-400 text-lg">No hay cotizaciones</p>
+            <p className="text-gray-400 dark:text-gray-600 text-sm mt-1">Crea la primera con el botón de arriba</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/5 border-b border-white/10">
+              <thead className="bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-white/10">
                 <tr>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium">Número</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium">Cliente</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium">Fecha</th>
-                  <th className="text-right px-4 py-3 text-gray-400 font-medium">Subtotal</th>
-                  <th className="text-right px-4 py-3 text-gray-400 font-medium">Descuento</th>
-                  <th className="text-right px-4 py-3 text-gray-400 font-medium">Total</th>
-                  <th className="text-center px-4 py-3 text-gray-400 font-medium">Estado</th>
-                  <th className="text-center px-4 py-3 text-gray-400 font-medium">Acciones</th>
+                  <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Número</th>
+                  <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Cliente</th>
+                  <th className="text-left px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Fecha</th>
+                  <th className="text-right px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Subtotal</th>
+                  <th className="text-right px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Descuento</th>
+                  <th className="text-right px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Total</th>
+                  <th className="text-center px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Estado</th>
+                  <th className="text-center px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filteredQuotations.map((q) => (
-                  <tr key={q.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 text-white font-mono font-medium">{q.quotationNumber}</td>
-                    <td className="px-4 py-3 text-white">
+                  <tr key={q.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3 text-gray-900 dark:text-white font-mono font-medium">{q.quotationNumber}</td>
+                    <td className="px-4 py-3 text-gray-900 dark:text-white">
                       {q.customer?.name ?? <span className="text-gray-600 italic">Sin cliente</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                       {new Date(q.createdAt).toLocaleDateString('es-CR')}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-300">{fmtMoney(Number(q.subtotal))}</td>
+                    <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{fmtMoney(Number(q.subtotal))}</td>
                     <td className="px-4 py-3 text-right text-red-400">
                       {Number(q.discountAmount) > 0 ? `-${fmtMoney(Number(q.discountAmount))}` : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right text-white font-medium">{fmtMoney(Number(q.total))}</td>
+                    <td className="px-4 py-3 text-right text-gray-900 dark:text-white font-medium">{fmtMoney(Number(q.total))}</td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={q.status} />
                     </td>
@@ -595,7 +595,7 @@ export default function QuotationsPage() {
                           <button
                             onClick={() => openEdit(q)}
                             title="Editar cotización"
-                            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-base"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-base"
                           >
                             ✏️
                           </button>

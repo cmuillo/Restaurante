@@ -33,7 +33,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          await api.post('/auth/logout');
+          const refreshToken = localStorage.getItem('refresh_token');
+          await api.post('/auth/logout', { refreshToken });
         } finally {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
