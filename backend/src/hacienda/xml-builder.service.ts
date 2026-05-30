@@ -142,11 +142,14 @@ export class XmlBuilderService {
   }
 
   private formatDate(d: Date): string {
-    // ISO 8601 con offset Costa Rica (UTC-6)
-    const offset = '-06:00';
+    // ISO 8601 con offset Costa Rica (UTC-6, sin horario de verano).
+    // Se calcula a partir del instante absoluto (UTC) para que el resultado
+    // sea correcto independientemente de la zona horaria del servidor.
+    const offsetMinutes = -6 * 60;
+    const crTime = new Date(d.getTime() + offsetMinutes * 60_000);
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
-           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${offset}`;
+    return `${crTime.getUTCFullYear()}-${pad(crTime.getUTCMonth() + 1)}-${pad(crTime.getUTCDate())}T` +
+           `${pad(crTime.getUTCHours())}:${pad(crTime.getUTCMinutes())}:${pad(crTime.getUTCSeconds())}-06:00`;
   }
 
   /** Código de tarifa de IVA según tabla Hacienda */

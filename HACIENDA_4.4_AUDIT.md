@@ -446,3 +446,53 @@ El contribuyente en RS **no factura electrónicamente**. En cambio:
 | 🟡 9 | UI en Admin: selección de régimen por sucursal | 3h |
 | 🟢 10 | Alertas automáticas al acercarse al umbral anual del RS | 4h |
 | | **Total estimado** | **~47 horas** |
+
+---
+
+# 🔐 AUDITORÍA DE SEGURIDAD, LÓGICA DE PROCESOS Y CÁLCULOS
+
+**Fecha**: 30 de mayo de 2026
+**Alcance**: Seguridad, lógica de procesos, cálculos de precios/totales, facturación, notas de crédito/débito e integración con Hacienda.
+
+Esta sección complementa la comparativa funcional anterior con una revisión de
+**seguridad y corrección de cálculos**. Los hallazgos marcados ✅ ya fueron
+corregidos en este mismo cambio.
+
+## 📊 TABLA DE HALLAZGOS
+
+| # | Área | Hallazgo | Severidad | Estado |
+|---|---|---|---|---|
+| C1 | Seguridad / Precios | `OrdersService.create` y `addItemsToOrder` confiaban en el `unitPrice` y `extraPrice` enviados por el cliente. El endpoint de kiosko (`POST /kiosk/:branchId/orders`) es **público y sin autenticación**, por lo que cualquiera podía crear órdenes (y facturas) con precios arbitrarios, incluso 0. | 🔴 CRÍTICA | ✅ CORREGIDO |
+| C2 | Cálculos / Totales | `addItemsToOrder` sumaba la propina (`tipAmt`) al `total` de la orden, mientras que `create` y `BillingService` la tratan como seguimiento interno (no se cobra). Agregar ítems a una orden alteraba el total de forma inconsistente. | 🟠 ALTA | ✅ CORREGIDO |
+| C3 | Notas de Crédito | `CreditNotesService.create` solo validaba que **una** NC no superara el total de la factura, sin considerar NC previas. Se podían emitir múltiples NC y acreditar más del total facturado. | 🟠 ALTA | ✅ CORREGIDO |
+| C4 | Hacienda / Fechas | `FechaEmision` (xml-builder) y la fecha (ddmmyy) de la clave de 50 dígitos usaban la hora local del servidor con offset `-06:00` fijo. En un servidor en UTC (Docker) la hora/fecha quedaban desfasadas y la clave podía no coincidir con la fecha de emisión. | 🟡 MEDIA | ✅ CORREGIDO |
+| C5 | Concurrencia / Numeración | La numeración de facturas, NC y ND se calcula leyendo el último registro y sumando 1 sin bloqueo. Bajo concurrencia pueden generarse consecutivos duplicados. | 🟡 MEDIA | ⏳ PENDIENTE |
+| C6 | Hacienda / Exoneración | Al exonerar IVA (`isExempt`) la factura fija `taxAmount=0`, pero las líneas conservan su `taxRate`; el XML genera `Impuesto` por línea que no cuadra con `TotalImpuesto=0`. Riesgo de rechazo. | 🟡 MEDIA | ⏳ PENDIENTE |
+| C7 | Hacienda / Descuentos | El descuento global (incl. canje de puntos) se reporta en `TotalDescuentos` pero no se prorratea a las líneas; la suma de líneas puede no cuadrar con el resumen. | 🟡 MEDIA | ⏳ PENDIENTE |
+| C8 | Notas de Crédito/Débito | Las NC/ND se guardan en BD pero **no se envían a Hacienda** (no construyen ni firman XML). `buildConsecutive` tampoco soporta `ND`. | 🟡 MEDIA | ⏳ PENDIENTE |
+
+## ✅ CORRECCIONES APLICADAS EN ESTE CAMBIO
+
+- **C1 — Precios desde la BD (anti-manipulación):** `OrdersService` ahora carga
+  `Product` y `ModifierOption` desde la base de datos y toma de allí el precio
+  unitario, el precio extra de modificadores y los nombres. Se ignoran los
+  montos enviados por el cliente. Si un `modifierOptionId` no existe, se rechaza
+  la orden.
+- **C2 — Propina consistente:** `addItemsToOrder` recalcula el total como
+  `subtotal + impuesto − descuento` (sin propina) y persiste `tipAmount` como
+  seguimiento interno, igual que `create` y `BillingService`.
+- **C3 — Tope acumulado de NC:** antes de emitir una NC se suma el monto de las
+  NC vigentes (no anuladas) de la misma factura y se rechaza si el acumulado
+  supera el total facturado, informando el saldo disponible.
+- **C4 — Fecha en hora de Costa Rica:** `FechaEmision` y la fecha de la clave se
+  derivan del instante absoluto (UTC) desplazado a UTC-6, independientemente de
+  la zona horaria del servidor.
+
+## ⏳ PENDIENTES RECOMENDADOS (siguiente iteración)
+
+- **C5:** Generar consecutivos dentro de la transacción con bloqueo
+  (`SELECT ... FOR UPDATE`) o secuencias de base de datos.
+- **C6/C7:** Prorratear exoneraciones y descuentos a nivel de línea para que las
+  líneas cuadren con el `ResumenFactura`.
+- **C8:** Construir, firmar y enviar el XML de NC/ND a Hacienda y extender
+  `buildConsecutive` con el tipo `ND` (código `02`).

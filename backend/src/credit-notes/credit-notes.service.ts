@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { CreditNote, CreditNoteStatus } from './entities/credit-note.entity';
 import { Invoice } from '../billing/entities/invoice.entity';
 import { CreateCreditNoteDto, CancelCreditNoteDto } from './dto/create-credit-note.dto';
@@ -42,6 +42,25 @@ export class CreditNotesService {
 
     if (dto.amount <= 0) {
       throw new BadRequestException('El monto debe ser mayor a 0');
+    }
+
+    // Sumar NC vigentes (no anuladas) ya emitidas contra esta factura para
+    // evitar sobre-acreditación: el acumulado no puede exceder el total facturado.
+    const existingCreditNotes = await this.creditNotesRepository.find({
+      where: { invoiceId: dto.invoiceId, status: Not(CreditNoteStatus.CANCELLED) },
+    });
+    const alreadyCredited = existingCreditNotes.reduce(
+      (sum, cn) => sum + Number(cn.amount),
+      0,
+    );
+    const invoiceTotal = Number(invoice.total);
+    if (alreadyCredited + dto.amount > invoiceTotal + 0.005) {
+      const remaining = Math.max(0, invoiceTotal - alreadyCredited);
+      throw new BadRequestException(
+        `El monto acumulado de notas de crédito (${(alreadyCredited + dto.amount).toFixed(2)}) ` +
+        `excede el total de la factura (${invoiceTotal.toFixed(2)}). ` +
+        `Saldo disponible para acreditar: ${remaining.toFixed(2)}`,
+      );
     }
 
     // Generar número de NC

@@ -6,12 +6,13 @@ import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemModifier } from './entities/order-item-modifier.entity';
 import { Product } from '../menu/entities/product.entity';
+import { ModifierOption } from '../menu/entities/modifier-option.entity';
 import { WebsocketsModule } from '../websockets/websockets.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, OrderItemModifier, Product]),
+    TypeOrmModule.forFeature([Order, OrderItem, OrderItemModifier, Product, ModifierOption]),
     WebsocketsModule,
     AuditModule,
   ],
