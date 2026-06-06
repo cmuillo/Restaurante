@@ -269,8 +269,18 @@ Bienvenida → [Idioma] → Tipo de pedido → Menú → Detalle → Carrito →
 │  8. Kiosko         │  URL separada +     │
 │                    │  modo kiosko +      │
 │                    │  sin acceso admin   │
+├─────────────────────────────────────────┤
+│  9. Precios        │  Autoritativos en   │
+│                    │  servidor (desde la │
+│                    │  BD, nunca cliente) │
 └─────────────────────────────────────────┘
 ```
+
+> **Precios autoritativos en el servidor:** al crear una orden o agregar ítems,
+> el backend toma el precio unitario, el precio extra de modificadores y los
+> nombres **desde la base de datos** (`Product` / `ModifierOption`), e ignora los
+> montos enviados por el cliente. Esto evita la manipulación de precios,
+> especialmente desde el endpoint público del kiosko (`POST /kiosk/:branchId/orders`).
 
 ### Roles y Acceso a Módulos
 

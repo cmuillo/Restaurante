@@ -10,6 +10,7 @@ import { OrderItemModifier } from './entities/order-item-modifier.entity';
 import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { Product } from '../menu/entities/product.entity';
+import { ModifierOption } from '../menu/entities/modifier-option.entity';
 import { RestaurantGateway } from '../websockets/restaurant.gateway';
 import { AuditService } from '../audit/audit.service';
 import { Table, TableStatus } from '../tables/entities/table.entity';
@@ -20,6 +21,7 @@ export class OrdersService {
     @InjectRepository(Order) private readonly orderRepository: Repository<Order>,
     @InjectRepository(OrderItem) private readonly itemRepository: Repository<OrderItem>,
     @InjectRepository(Product) private readonly productRepository: Repository<Product>,
+    @InjectRepository(ModifierOption) private readonly modifierOptionRepository: Repository<ModifierOption>,
     private readonly dataSource: DataSource,
     private readonly gateway: RestaurantGateway,
     private readonly auditService: AuditService,
@@ -69,6 +71,24 @@ export class OrdersService {
     return null;
   }
 
+  /**
+   * Carga las opciones de modificador desde la BD indexadas por id.
+   * Los precios/nombres se toman SIEMPRE de la BD (fuente de verdad),
+   * nunca de lo que envía el cliente, para evitar manipulación de precios.
+   */
+  private async loadModifierOptions(
+    items: Array<{ modifiers?: Array<{ modifierOptionId: string }> }>,
+  ): Promise<Map<string, ModifierOption>> {
+    const optionIds = [
+      ...new Set(
+        items.flatMap((item) => (item.modifiers ?? []).map((m) => m.modifierOptionId)),
+      ),
+    ];
+    if (optionIds.length === 0) return new Map();
+    const options = await this.modifierOptionRepository.findBy({ id: In(optionIds) });
+    return new Map(options.map((o) => [o.id, o]));
+  }
+
   async create(dto: CreateOrderDto, userId?: string): Promise<Order> {
     const created = await this.dataSource.transaction(async (manager) => {
       // Calcular totales
@@ -80,6 +100,7 @@ export class OrdersService {
         ? await this.productRepository.findBy({ id: In(uniqueProductIds) })
         : [];
       const productsById = new Map(products.map((p) => [p.id, p]));
+      const optionsById = await this.loadModifierOptions(dto.items);
 
       const itemsData: Partial<OrderItem>[] = dto.items.map((item) => {
         const product = productsById.get(item.productId);
@@ -87,13 +108,20 @@ export class OrdersService {
           throw new BadRequestException(`Producto no encontrado para item ${item.productId}`);
         }
 
-        let itemTotal = item.unitPrice * item.quantity;
+        // El precio unitario proviene de la BD, no del cliente (anti-manipulación)
+        const unitPrice = Number(product.price);
+        let itemTotal = unitPrice * item.quantity;
         const modifiers: Partial<OrderItemModifier>[] = (item.modifiers || []).map((mod) => {
-          itemTotal += mod.extraPrice * item.quantity;
+          const option = optionsById.get(mod.modifierOptionId);
+          if (!option) {
+            throw new BadRequestException(`Modificador no encontrado: ${mod.modifierOptionId}`);
+          }
+          const extraPrice = Number(option.extraPrice);
+          itemTotal += extraPrice * item.quantity;
           return {
-            modifierOptionId: mod.modifierOptionId,
-            optionName: mod.optionName,
-            extraPrice: mod.extraPrice,
+            modifierOptionId: option.id,
+            optionName: option.name,
+            extraPrice,
           };
         });
 
@@ -105,8 +133,8 @@ export class OrdersService {
 
         return {
           productId: item.productId,
-          productName: item.productName,
-          unitPrice: item.unitPrice,
+          productName: product.name,
+          unitPrice,
           quantity: item.quantity,
           subtotal: itemTotal,
           notes: item.notes,
@@ -339,6 +367,7 @@ export class OrdersService {
     const uniqueProductIds = [...new Set(items.map((i) => i.productId))];
     const products = await this.productRepository.findBy({ id: In(uniqueProductIds) });
     const productsById = new Map(products.map((p) => [p.id, p]));
+    const optionsById = await this.loadModifierOptions(items);
 
     await this.dataSource.transaction(async (manager) => {
       const newItems: Partial<OrderItem>[] = items.map((item) => {
@@ -346,22 +375,28 @@ export class OrdersService {
         if (!product) throw new BadRequestException(`Producto no encontrado: ${item.productId}`);
 
         const lineTaxRate = product.taxRate == null ? order.taxPercentage : Number(product.taxRate);
-        const modifiers: Partial<OrderItemModifier>[] = (item.modifiers ?? []).map((m) => ({
-          modifierOptionId: m.modifierOptionId,
-          optionName: m.optionName,
-          extraPrice: m.extraPrice,
-        }));
+        const modifiers: Partial<OrderItemModifier>[] = (item.modifiers ?? []).map((m) => {
+          const option = optionsById.get(m.modifierOptionId);
+          if (!option) throw new BadRequestException(`Modificador no encontrado: ${m.modifierOptionId}`);
+          return {
+            modifierOptionId: option.id,
+            optionName: option.name,
+            extraPrice: Number(option.extraPrice),
+          };
+        });
 
-        let lineTotal = item.unitPrice * item.quantity;
-        for (const mod of item.modifiers ?? []) {
-          lineTotal += mod.extraPrice * item.quantity;
+        // El precio unitario proviene de la BD, no del cliente (anti-manipulación)
+        const unitPrice = Number(product.price);
+        let lineTotal = unitPrice * item.quantity;
+        for (const mod of modifiers) {
+          lineTotal += Number(mod.extraPrice) * item.quantity;
         }
 
         return {
           orderId: order.id,
           productId: item.productId,
-          productName: item.productName,
-          unitPrice: item.unitPrice,
+          productName: product.name,
+          unitPrice,
           quantity: item.quantity,
           subtotal: lineTotal,
           notes: item.notes,
@@ -396,12 +431,15 @@ export class OrdersService {
 
       const effectiveTaxPct = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
       const tipAmt = subtotal * (Number(order.tipPercentage) / 100);
-      const total = subtotal + taxAmount + tipAmt - Number(order.discountAmount);
+      // La propina es seguimiento interno y NO se suma al total a cobrar
+      // (consistente con create() y BillingService).
+      const total = subtotal + taxAmount - Number(order.discountAmount);
 
       await manager.update(Order, { id: order.id }, {
         subtotal,
         taxPercentage: effectiveTaxPct,
         taxAmount,
+        tipAmount: tipAmt,
         total,
       });
     });

@@ -26,9 +26,12 @@ function buildKey(params: {
   situation?: '1' | '2' | '3'; // 1=normal 2=contingencia 3=sin internet
 }): string {
   const d = params.date;
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = String(d.getFullYear()).slice(-2);
+  // Fecha en hora de Costa Rica (UTC-6) calculada desde el instante absoluto,
+  // para que coincida con FechaEmision sin importar la zona del servidor.
+  const crDate = new Date(d.getTime() + -6 * 60 * 60_000);
+  const day = String(crDate.getUTCDate()).padStart(2, '0');
+  const month = String(crDate.getUTCMonth() + 1).padStart(2, '0');
+  const year = String(crDate.getUTCFullYear()).slice(-2);
   const taxId = params.taxId.replace(/\D/g, '').padStart(12, '0');
   const situation = params.situation ?? '1';
 
